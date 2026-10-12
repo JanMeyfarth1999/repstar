@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:repstar/screens/create_training_screen.dart';
 
 void main() {
   runApp(const RepStarApp());
@@ -32,7 +33,7 @@ class RepStarApp extends StatelessWidget {
   }
 }
 
-/// Zeigt die gespeicherten Trainings an.
+/// Zeigt später die gespeicherten Trainings an.
 class TrainingScreen extends StatelessWidget {
   const TrainingScreen({super.key});
 
@@ -50,10 +51,10 @@ class TrainingScreen extends StatelessWidget {
             icon: const Icon(Icons.add),
             color: Theme.of(context).colorScheme.primary,
             onPressed: () {
-              // Vorläufiger Hinweis, bis die Erstellung eingebaut ist.
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Hier erstellen wir gleich dein Training'),
+              // Öffnet die Trainingserstellung über dem Startbildschirm.
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => const CreateTrainingScreen(),
                 ),
               );
             },
@@ -66,18 +67,28 @@ class TrainingScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.fitness_center, size: 64, color: Color(0xFF76Ff03)),
+              Icon(
+                Icons.fitness_center,
+                size: 64,
+                color: Color(0xFF76FF03),
+              ),
               SizedBox(height: 24),
               Text(
                 'Dein Training. Deine Bühne.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               SizedBox(height: 12),
               Text(
-                'Erstelle dein erstes Training über das + oben rechts',
+                'Erstelle dein erstes Training über das + oben rechts.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.white70),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white70,
+                ),
               ),
             ],
           ),
