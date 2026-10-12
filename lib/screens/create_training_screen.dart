@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:repstar/data/exercise_library.dart';
 import 'package:repstar/models/exercise.dart';
+import 'package:repstar/models/training_plan.dart';
 
 /// Ermöglicht das Benennen eines Trainings und die Übungsauswahl.
 class CreateTrainingScreen extends StatefulWidget {
@@ -12,26 +13,54 @@ class CreateTrainingScreen extends StatefulWidget {
 }
 
 class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
-  /// Verwaltet den Text im Namensfeld.
   final TextEditingController _nameController = TextEditingController();
 
-  /// Speichert die Kennungen der ausgewählten Übungen.
-  final Set<String> _selectedExerciseIds = {};
+  /// Die Reihenfolge der Auswahl wird für das Training übernommen.
+  final List<Exercise> _selectedExercises = [];
+
+  /// Prüft anhand der Kennung, ob eine Übung ausgewählt ist.
+  bool _isSelected(Exercise exercise) {
+    return _selectedExercises.any((item) => item.id == exercise.id);
+  }
 
   /// Fügt eine Übung hinzu oder entfernt sie aus der Auswahl.
   void _toggleExercise(Exercise exercise) {
     setState(() {
-      if (_selectedExerciseIds.contains(exercise.id)) {
-        _selectedExerciseIds.remove(exercise.id);
+      if (_isSelected(exercise)) {
+        _selectedExercises.removeWhere((item) => item.id == exercise.id);
       } else {
-        _selectedExerciseIds.add(exercise.id);
+        _selectedExercises.add(exercise);
       }
     });
   }
 
+  /// Prüft die Eingaben und gibt das Training an die Startseite zurück.
+  void _saveTraining() {
+    final name = _nameController.text.trim();
+
+    if (name.isEmpty || _selectedExercises.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Bitte benenne dein Training und wähle mindestens eine Übung.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final training = TrainingPlan(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: name,
+      exercises: _selectedExercises,
+    );
+
+    // Schließt den Bildschirm und liefert das erstellte Training zurück.
+    Navigator.of(context).pop<TrainingPlan>(training);
+  }
+
   @override
   void dispose() {
-    // Den Controller freigeben, wenn der Bildschirm geschlossen wird.
     _nameController.dispose();
     super.dispose();
   }
@@ -63,24 +92,21 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '${_selectedExerciseIds.length} Übungen ausgewählt',
+                '${_selectedExercises.length} Übungen ausgewählt',
                 style: TextStyle(color: accentColor),
               ),
             ),
           ),
           const SizedBox(height: 12),
-
-          // Die Liste nutzt den verfügbaren Platz und ist scrollbar.
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               itemCount: exerciseLibrary.length,
               itemBuilder: (context, index) {
                 final exercise = exerciseLibrary[index];
-                final isSelected =
-                    _selectedExerciseIds.contains(exercise.id);
+                final isSelected = _isSelected(exercise);
 
-                // Dieselbe Darstellung wird für jede Übung verwendet.
+                // Dieselbe Karte stellt jede Übung aus der Liste dar.
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   child: Padding(
@@ -142,6 +168,18 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
             ),
           ),
         ],
+      ),
+
+      // Bleibt unterhalb der scrollbaren Übungsliste erreichbar.
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
+            onPressed: _saveTraining,
+            icon: const Icon(Icons.check),
+            label: const Text('Training speichern'),
+          ),
+        ),
       ),
     );
   }
