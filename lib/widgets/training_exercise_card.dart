@@ -79,33 +79,31 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
           SizedBox(
             width: 28,
             child: Text(
-              '${index +1}',
+              '${index + 1}',
               style: TextStyle(
-                color: workoutSet.isCompleted
-                  ? accentColor
-                  : Colors.white70,
+                color: workoutSet.isCompleted ? accentColor : Colors.white70,
               ),
             ),
           ),
-        Expanded(
-          child: TextFormField(
-            initialValue: workoutSet.repetitions?.toString() ?? '',
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Wdh',
-              border: OutlineInputBorder(),
-              isDense:  true,
-            ),
-            onChanged: (value){
-              setState(() {
-                workoutSet.repetitions = int.tryParse(value.trim());
+          Expanded(
+            child: TextFormField(
+              initialValue: workoutSet.repetitions?.toString() ?? '',
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Wdh',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  workoutSet.repetitions = int.tryParse(value.trim());
 
-                // Geänderte werte müssen erneut bestätigt werden.
-              });
-            },
+                  // Geänderte werte müssen erneut bestätigt werden.
+                });
+              },
+            ),
           ),
-          ) ,
-          const SizedBox(width: 8), 
+          const SizedBox(width: 8),
           Expanded(
             child: TextFormField(
               initialValue: workoutSet.weight?.toString() ?? '',
@@ -121,26 +119,23 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
                 setState(() {
                   // Unterstützt beispielsweise 35,5 und 35.5.
                   workoutSet.weight = double.tryParse(
-                    value.trim().replaceAll(',', '.')
+                    value.trim().replaceAll(',', '.'),
                   );
                   workoutSet.isCompleted = false;
                 });
               },
-              ),
             ),
-            Checkbox(
-              value: workoutSet.isCompleted,
-              activeColor: accentColor,
-              onChanged: (_) => _toggleCompleted(workoutSet),
-            ),
-            IconButton(
-              tooltip: 'Satz entfernen',
-              icon: const Icon(Icons.remove_circle_outline),
-              onPressed: widget.sets.length > 1
-                  ? () => _removeSet(index)
-                  : null,
-            ),
-          
+          ),
+          Checkbox(
+            value: workoutSet.isCompleted,
+            activeColor: accentColor,
+            onChanged: (_) => _toggleCompleted(workoutSet),
+          ),
+          IconButton(
+            tooltip: 'Satz entfernen',
+            icon: const Icon(Icons.remove_circle_outline),
+            onPressed: widget.sets.length > 1 ? () => _removeSet(index) : null,
+          ),
         ],
       ),
     );
@@ -148,11 +143,65 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
 
   @override
   Widget build(BuildContext context) {
-    final completedSets =
-        widget.sets.where((workoutSet) => workoutSet.isCompleted).length;
+    final completedSets = widget.sets
+        .where((workoutSet) => workoutSet.isCompleted)
+        .length;
 
-        return Card(
-          
-        )
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        initiallyExpanded: widget.initiallyExpaned,
+        tilePadding: const EdgeInsets.all(12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+
+        // Auch bei geschlossener Karte bleibt ein kleines Bild sichtbar.
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: 56,
+            height: 56,
+            color: Colors.white,
+            child: Image.asset(widget.exercise.imagePath, fit: BoxFit.contain),
+          ),
+        ),
+        title: Text(
+          widget.exercise.name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          '$completedSets von ${widget.sets.length} Sätzen erledigt.',
+        ),
+        children: [
+          // Das große Bild erscheint beim Aufklappen
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: double.infinity,
+              height: 220,
+              color: Colors.white,
+              child: Image.asset(
+                widget.exercise.imagePath,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Für jeden Satz wird dieselbe Zeilen-Methode aufgerufen.
+          for (int index = 0; index < widget.sets.length; index++)
+            _buildSetRow(index),
+
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _addSet,
+              icon: const Icon(Icons.add),
+              label: const Text('Satz hinzufügen'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
