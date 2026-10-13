@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:repstar/screens/create_training_screen.dart';
+import 'package:repstar/screens/training_screen.dart';
 
 void main() {
   runApp(const RepStarApp());
 }
 
-/// Legt das Design fest und öffnet den Trainingsbereich.
+/// Startet RepStar und legt das gemeinsame Design fest.
 class RepStarApp extends StatelessWidget {
   const RepStarApp({super.key});
 
@@ -29,71 +29,6 @@ class RepStarApp extends StatelessWidget {
         ),
       ),
       home: const TrainingScreen(),
-    );
-  }
-}
-
-/// Zeigt später die gespeicherten Trainings an.
-class TrainingScreen extends StatelessWidget {
-  const TrainingScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Training',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Training erstellen',
-            icon: const Icon(Icons.add),
-            color: Theme.of(context).colorScheme.primary,
-            onPressed: () {
-              // Öffnet die Trainingserstellung über dem Startbildschirm.
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => const CreateTrainingScreen(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.fitness_center,
-                size: 64,
-                color: Color(0xFF76FF03),
-              ),
-              SizedBox(height: 24),
-              Text(
-                'Dein Training. Deine Bühne.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 12),
-              Text(
-                'Erstelle dein erstes Training über das + oben rechts.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white70,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
