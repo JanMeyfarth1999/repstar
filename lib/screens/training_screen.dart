@@ -15,7 +15,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   /// Öffnet die Erstellung und wartet auf das Ergebnis.
   Future<void> _createTraining() async {
-    final training = await Navigation.of(context).push<TrainingPlan>(
+    final training = await Navigator.of(context).push<TrainingPlan>(
       MaterialPageRoute<TrainingPlan>(
         builder: (context) => const CreateTrainingScreen(),
       ),
@@ -80,7 +80,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
               ),
             )
           : ListView.builder(
-              paddind: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               itemCount: _trainings.length,
               itemBuilder: (context, index) {
                 final training = _trainings[index];
@@ -89,7 +89,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   child: Padding(
-                    padding: const EdgeInsetsGeometry.all(16),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -109,7 +109,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                         Text(
                           training.exercises
                               .map((exercise) => exercise.name)
-                              .join(' . '),
+                              .join(' · '),
                         ),
                       ],
                     ),
