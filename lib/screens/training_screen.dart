@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:repstar/models/training_plan.dart';
+import 'package:repstar/models/training_session.dart';
+import 'package:repstar/screens/active_training_screen.dart';
 import 'package:repstar/screens/create_training_screen.dart';
 
-/// Zeigt die während der laufenden App angelegten Trainings.
+/// Zeigt Trainingsvorlagen und startet neue Trainingseinheiten.
 class TrainingScreen extends StatefulWidget {
   const TrainingScreen({super.key});
 
@@ -13,15 +15,16 @@ class TrainingScreen extends StatefulWidget {
 class _TrainingScreenState extends State<TrainingScreen> {
   final List<TrainingPlan> _trainings = [];
 
-  /// Öffnet die Erstellung und wartet auf das Ergebnis.
+  /// Verlauf je Training; bisher nur während der laufenden App.
+  final Map<String, List<TrainingSession>> _sessionsByTraining = {};
+
   Future<void> _createTraining() async {
     final training = await Navigator.of(context).push<TrainingPlan>(
       MaterialPageRoute<TrainingPlan>(
         builder: (context) => const CreateTrainingScreen(),
       ),
     );
-    // Beim Zurückgehen ohne Speichern ist das Ergebnis null.
-    // mounted prüft, ob dieser Bildschirm noch existiert.
+
     if (!mounted || training == null) {
       return;
     }
@@ -29,6 +32,41 @@ class _TrainingScreenState extends State<TrainingScreen> {
     setState(() {
       _trainings.add(training);
     });
+  }
+
+  /// Startet eine neue Einheit mit den Werten vom letzten Mal.
+  Future<void> _startTraining(TrainingPlan training) async {
+    final history = _sessionsByTraining[training.id];
+    final previousSession =
+        history == null || history.isEmpty ? null : history.last;
+
+    final session = await Navigator.of(context).push<TrainingSession>(
+      MaterialPageRoute<TrainingSession>(
+        builder: (context) => ActiveTrainingScreen(
+          training: training,
+          previousSession: previousSession,
+        ),
+      ),
+    );
+
+    if (!mounted || session == null) {
+      return;
+    }
+
+    setState(() {
+      // Eine neue Liste anlegen, falls dies die erste Einheit ist.
+      final sessions = _sessionsByTraining.putIfAbsent(
+        training.id,
+        () => [],
+      );
+      sessions.add(session);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Trainingseinheit gespeichert.'),
+      ),
+    );
   }
 
   @override
@@ -71,7 +109,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                     ),
                     SizedBox(height: 12),
                     Text(
-                      'Erstelle dein erstes Training über das + oben rechts',
+                      'Erstelle dein erstes Training über das + oben rechts.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white70),
                     ),
@@ -84,8 +122,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
               itemCount: _trainings.length,
               itemBuilder: (context, index) {
                 final training = _trainings[index];
+                final history = _sessionsByTraining[training.id];
+                final lastSession =
+                    history == null || history.isEmpty
+                        ? null
+                        : history.last;
 
-                // Eine gemeinsame Kartendarstellung für alle Trainings.
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   child: Padding(
@@ -110,6 +152,20 @@ class _TrainingScreenState extends State<TrainingScreen> {
                           training.exercises
                               .map((exercise) => exercise.name)
                               .join(' · '),
+                        ),
+                        if (lastSession != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'Letzte Trainingsdauer: '
+                            '${lastSession.duration.inMinutes} Minuten',
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: () => _startTraining(training),
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Training starten'),
                         ),
                       ],
                     ),

@@ -2,21 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:repstar/models/exercise.dart';
 import 'package:repstar/models/workouts_set.dart';
 
-/// Zeigt die Übung mit ihrem bearbeiteten Trainingssätzen.
+/// Zeigt eine Übung mit ihren bearbeitbaren Trainingssätzen.
 class TrainingExerciseCard extends StatefulWidget {
   final Exercise exercise;
   final List<WorkoutSet> sets;
-  final bool initiallyExpaned;
+
+  /// Bestimmt, ob die Karte beim Öffnen bereits aufgeklappt ist.
+  final bool initiallyExpanded;
 
   const TrainingExerciseCard({
     super.key,
     required this.exercise,
     required this.sets,
-    this.initiallyExpaned = false,
+    this.initiallyExpanded = false,
   });
 
   @override
-  State<TrainingExerciseCard> createState() => _TrainingExerciseCardState();
+  State<TrainingExerciseCard> createState() =>
+      _TrainingExerciseCardState();
 }
 
 class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
@@ -151,7 +154,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
       margin: const EdgeInsets.only(bottom: 16),
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
-        initiallyExpanded: widget.initiallyExpaned,
+        initiallyExpanded: widget.initiallyExpanded,
         tilePadding: const EdgeInsets.all(12),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
 
