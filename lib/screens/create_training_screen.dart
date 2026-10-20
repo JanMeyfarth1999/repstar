@@ -8,8 +8,7 @@ class CreateTrainingScreen extends StatefulWidget {
   const CreateTrainingScreen({super.key});
 
   @override
-  State<CreateTrainingScreen> createState() =>
-      _CreateTrainingScreenState();
+  State<CreateTrainingScreen> createState() => _CreateTrainingScreenState();
 }
 
 class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
@@ -17,6 +16,9 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
 
   /// Die Reihenfolge der Auswahl wird für das Training übernommen.
   final List<Exercise> _selectedExercises = [];
+
+  /// Ohne ausgewählte Muskelgruppe werden alle Übungen angezeigt.
+  String? _selectedMuscleGroup;
 
   /// Prüft anhand der Kennung, ob eine Übung ausgewählt ist.
   bool _isSelected(Exercise exercise) {
@@ -68,11 +70,19 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
   @override
   Widget build(BuildContext context) {
     final accentColor = Theme.of(context).colorScheme.primary;
+    // Jede vorhandene Muskelgruppe einmal anzeigen und alphabetisch sortieren.
+    final muscleGroups =
+        exerciseLibrary.map((exercise) => exercise.muscleGroup).toSet().toList()
+          ..sort();
+
+    // Der Filter ändert nur die Anzeige, nicht die ausgewählten Übungen.
+    final filteredExercises = exerciseLibrary.where((exerise) {
+      return _selectedMuscleGroup == null ||
+          exerise.muscleGroup == _selectedMuscleGroup;
+    }).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Training erstellen'),
-      ),
+      appBar: AppBar(title: const Text('Training erstellen')),
       body: Column(
         children: [
           Padding(
@@ -98,12 +108,47 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // Die Filterleiste lässt sich bei wenig Platz seitlich scrollen.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                ChoiceChip(
+                  label: const Text('Alle'),
+                  selected: _selectedMuscleGroup == null,
+                  onSelected: (_) {
+                    setState(() {
+                      _selectedMuscleGroup = null;
+                    });
+                  },
+                ),
+                for (final muscleGroup in muscleGroups)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: ChoiceChip(
+                      label: Text(muscleGroup),
+                      selected: _selectedMuscleGroup == muscleGroup,
+                      onSelected: (selected) {
+                        setState(() {
+                          // Erneutes Antippen hebt den Filter auf.
+                          _selectedMuscleGroup = selected ? muscleGroup : null;
+                        });
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              itemCount: exerciseLibrary.length,
+              itemCount: filteredExercises.length,
               itemBuilder: (context, index) {
-                final exercise = exerciseLibrary[index];
+                final exercise = filteredExercises[index];
                 final isSelected = _isSelected(exercise);
 
                 // Dieselbe Karte stellt jede Übung aus der Liste dar.
@@ -141,9 +186,7 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                               Text(
                                 '${exercise.muscleGroup} · '
                                 '${exercise.equipment}',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                ),
+                                style: const TextStyle(color: Colors.white70),
                               ),
                             ],
                           ),
