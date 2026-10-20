@@ -57,7 +57,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
         _isLoading = false;
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) {
         return;
       }
@@ -69,6 +69,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
       });
 
       debugPrint('Fehler beim Laden: $error');
+      // Zeigt die Datei und Zeile, in der das Einlesen scheitert.
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 

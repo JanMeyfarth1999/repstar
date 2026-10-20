@@ -34,17 +34,13 @@ class TrainingSession {
   /// Berechnet die gesamte Trainingsdauer.
   Duration get duration => endedAt.difference(startedAt);
 
-  /// Wandelt die Trainigseinheit in speicherbare Daten um.
+  /// Verwendet beim Speichern einheitliche Feldnamen.
   Map<String, dynamic> toJson() {
     return {
-      'trainingsPlanId': trainingPlanId,
-
-      // Zeitpunte als Text speichern.
+      'trainingPlanId': trainingPlanId,
       'startedAt': startedAt.toIso8601String(),
-      'endeAt': startedAt.toIso8601String(),
-
-      // Jeder Satz verwendet seine eigene toJson-Methode.
-      'setByExercise': setsByExercise.map(
+      'endedAt': endedAt.toIso8601String(),
+      'setsByExercise': setsByExercise.map(
         (exerciseId, sets) => MapEntry(
           exerciseId,
           sets.map((workoutSet) => workoutSet.toJson()).toList(),
@@ -53,21 +49,33 @@ class TrainingSession {
     };
   }
 
-  /// Stellt die Trainingseinheit aus gespeicherten Daten wieder her
+  /// Liest das korrigierte Format und die bisherigen Feldnamen.
   factory TrainingSession.fromJson(Map<String, dynamic> json) {
-    final exerciseData = json['setByexercise'] as Map<String, dynamic>;
+    final exerciseData = (
+      json['setsByExercise'] ??
+      json['setByExercise'] ??
+      json['setByexercise']
+    ) as Map<String, dynamic>;
+
+    final planId =
+        (json['trainingPlanId'] ?? json['trainingsPlanId']) as String;
+
+    final endTime =
+        (json['endedAt'] ?? json['endeAt']) as String;
 
     return TrainingSession(
-      trainingPlanId: json['trainingPlanId'] as String,
+      trainingPlanId: planId,
       startedAt: DateTime.parse(json['startedAt'] as String),
-      endedAt: DateTime.parse(json['endedAt'] as String),
+      endedAt: DateTime.parse(endTime),
       setsByExercise: exerciseData.map((exerciseId, value) {
         final setData = value as List<dynamic>;
 
         return MapEntry(
           exerciseId,
           setData.map((item) {
-            return WorkoutSet.fromJson(item as Map<String, dynamic>);
+            return WorkoutSet.fromJson(
+              item as Map<String, dynamic>,
+            );
           }).toList(),
         );
       }),
