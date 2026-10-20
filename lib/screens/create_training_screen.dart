@@ -103,39 +103,73 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
 
   /// Zeigt die ausgewählten Ünungen in ihrer Trainingsreihenfolge.
   Widget _buildSelectedExercises() {
-    if(_selectedExercises.isEmpty) {
+    if (_selectedExercises.isEmpty) {
       return const SizedBox.shrink();
     }
 
     // Maximal drei Zeilen gleichzeitig anzeigen; weitere sind scrollbar.
-    final visileRows = 
-      _selectedExercises.length > 3 ? 3 : _selectedExercises.length;
+    final visibleRows = _selectedExercises.length > 3
+        ? 3
+        : _selectedExercises.length;
 
-      return Card(
-        margin: const EdgeInsets.only(bottom: 16),
-        clipBehavior: Clip.antiAlias,
-        child: ExpansionTile(
-          title: const Text('Ausgewählte Übungen'),
-          subtitle: const Text('Zum Sortieren den Griff rechts ziehen'),
-          children: [
-            SizedBox(
-              height: visileRows * 72.0,
-              child: ReorderableListView.builder(
-                padding: EdgeInsets.zero,
-                primary: false,
-                itemExtent: 72,
-                buildDefaultDragHandles: false,
-                itemCount: _selectedExercises.length,
-                onReorder: _reorderExercises,
-                itemBuilder: (context, index) {
-                  final exercise = _selectedExercises[index];
-                }
-                ,
-              ),
-            )
-          ],
-        ),
-      );
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        title: const Text('Ausgewählte Übungen'),
+        subtitle: const Text('Zum Sortieren den Griff rechts ziehen'),
+        children: [
+          SizedBox(
+            height: visibleRows * 72.0,
+            child: ReorderableListView.builder(
+              padding: EdgeInsets.zero,
+              primary: false,
+              itemExtent: 72,
+              buildDefaultDragHandles: false,
+              itemCount: _selectedExercises.length,
+              onReorder: _reorderExercises,
+              itemBuilder: (context, index) {
+                final exercise = _selectedExercises[index];
+
+                return ListTile(
+                  // Die Kennung bleibt beim Verschieben gleich.
+                  key: ValueKey(exercise.id),
+                  leading: SizedBox(
+                    width: 28,
+                    child: Center(child: Text('${index + 1}')),
+                  ),
+                  title: Text(
+                    exercise.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Übung entfernen',
+                        icon: const Icon(Icons.remove_circle_outline),
+                        onPressed: () => _toggleExercise(exercise),
+                      ),
+                      ReorderableDragStartListener(
+                        index: index,
+                        child: const Tooltip(
+                          message: 'Übung verschieben',
+                          child: Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Icon(Icons.drag_handle),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

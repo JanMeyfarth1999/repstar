@@ -243,16 +243,13 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
         ),
         children: [
           // Das große Bild erscheint beim Aufklappen
+          // Die Höhe passt sich dem Bildformat an, ohne seitliche Freiflächen.
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Container(
+            child: Image.asset(
+              widget.exercise.imagePath,
               width: double.infinity,
-              height: 220,
-              color: Colors.white,
-              child: Image.asset(
-                widget.exercise.imagePath,
-                fit: BoxFit.contain,
-              ),
+              fit: BoxFit.contain,
             ),
           ),
           const SizedBox(height: 16),
