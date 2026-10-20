@@ -5,7 +5,10 @@ import 'package:repstar/models/training_plan.dart';
 
 /// Ermöglicht das Benennen eines Trainings und die Übungsauswahl.
 class CreateTrainingScreen extends StatefulWidget {
-  const CreateTrainingScreen({super.key});
+  /// Beim Bearbeiten wird die vorhandene Vorlage übergeben.
+  final TrainingPlan? initialTraining;
+
+  const CreateTrainingScreen({super.key, this.initialTraining});
 
   @override
   State<CreateTrainingScreen> createState() => _CreateTrainingScreenState();
@@ -20,6 +23,21 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
   /// Ohne ausgewählte Muskelgruppe werden alle Übungen angezeigt.
   String? _selectedMuscleGroup;
 
+  @override
+  void initState() {
+    super.initState();
+
+    final training = widget.initialTraining;
+
+    if (training != null) {
+      // Vorhandenen Namen und Übungen zum bearbeiten übernehemen.
+      _nameController.text = training.name;
+
+      // Die Auswahl erhält eine eigene Liste.
+      _selectedExercises.addAll(training.exercises);
+    }
+  }
+
   /// Prüft anhand der Kennung, ob eine Übung ausgewählt ist.
   bool _isSelected(Exercise exercise) {
     return _selectedExercises.any((item) => item.id == exercise.id);
@@ -33,6 +51,19 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
       } else {
         _selectedExercises.add(exercise);
       }
+    });
+  }
+
+  /// Verschiebt eine Übung innerhalb der Trainingsreihenfolge.
+  void _reorderExercises(int oldIndex, int newIndex) {
+    setState(() {
+      // Beim verschieben nach unten verschiebt das Entfernen den Zielindex.
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+
+      final exercise = _selectedExercises.removeAt(oldIndex);
+      _selectedExercises.insert(newIndex, exercise);
     });
   }
 
@@ -52,7 +83,10 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
     }
 
     final training = TrainingPlan(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      // Beib bearbeiten bleibt die Kennung samt Trainingshistorie erhalten.
+      id:
+          widget.initialTraining?.id ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
       name: name,
       exercises: _selectedExercises,
     );
@@ -65,6 +99,43 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
   void dispose() {
     _nameController.dispose();
     super.dispose();
+  }
+
+  /// Zeigt die ausgewählten Ünungen in ihrer Trainingsreihenfolge.
+  Widget _buildSelectedExercises() {
+    if(_selectedExercises.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Maximal drei Zeilen gleichzeitig anzeigen; weitere sind scrollbar.
+    final visileRows = 
+      _selectedExercises.length > 3 ? 3 : _selectedExercises.length;
+
+      return Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          title: const Text('Ausgewählte Übungen'),
+          subtitle: const Text('Zum Sortieren den Griff rechts ziehen'),
+          children: [
+            SizedBox(
+              height: visileRows * 72.0,
+              child: ReorderableListView.builder(
+                padding: EdgeInsets.zero,
+                primary: false,
+                itemExtent: 72,
+                buildDefaultDragHandles: false,
+                itemCount: _selectedExercises.length,
+                onReorder: _reorderExercises,
+                itemBuilder: (context, index) {
+                  final exercise = _selectedExercises[index];
+                }
+                ,
+              ),
+            )
+          ],
+        ),
+      );
   }
 
   @override
@@ -82,7 +153,13 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
     }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Training erstellen')),
+      appBar: AppBar(
+        title: Text(
+          widget.initialTraining == null
+              ? 'Training erstellen'
+              : 'Training bearbeiten',
+        ),
+      ),
       body: Column(
         children: [
           Padding(
@@ -146,9 +223,14 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              itemCount: filteredExercises.length,
+              // Der erste Eintrag enthält die sortierbare Auswahl.
+              itemCount: filteredExercises.length + 1,
               itemBuilder: (context, index) {
-                final exercise = filteredExercises[index];
+                if (index == 0) {
+                  return _buildSelectedExercises();
+                }
+                // Die Übungsbibliothek beginnt hinter dem zusätlichen ersten Eintrag.
+                final exercise = filteredExercises[index - 1];
                 final isSelected = _isSelected(exercise);
 
                 // Dieselbe Karte stellt jede Übung aus der Liste dar.

@@ -144,10 +144,38 @@ class _TrainingScreenState extends State<TrainingScreen> {
     await _saveData();
   }
 
+  Future<void> _editTraining(TrainingPlan training) async {
+    final updatedTraining = await Navigator.of(context).push<TrainingPlan>(
+      MaterialPageRoute<TrainingPlan>(
+        builder: (context) => CreateTrainingScreen(initialTraining: training),
+      ),
+    );
+
+    // Zurück ohne Speichern lässt die ursprüngliche Vorlage unverändert.
+    if (!mounted || updatedTraining == null) {
+      return;
+    }
+
+    final index = _trainings.indexWhere((item) => item.id == training.id);
+
+    if (index == -1) {
+      return;
+    }
+
+    setState(() {
+      // Die bestehende Vorlage ersetzen, statt eine zweite anzulegen.
+      _trainings[index] = updatedTraining;
+      _hasUnsavedChanges = true;
+    });
+
+    await _saveData();
+  }
+
   Future<void> _startTraining(TrainingPlan training) async {
     final history = _sessionsByTraining[training.id];
-    final previousSession =
-        history == null || history.isEmpty ? null : history.last;
+    final previousSession = history == null || history.isEmpty
+        ? null
+        : history.last;
 
     final session = await Navigator.of(context).push<TrainingSession>(
       MaterialPageRoute<TrainingSession>(
@@ -163,10 +191,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
     }
 
     setState(() {
-      final sessions = _sessionsByTraining.putIfAbsent(
-        training.id,
-        () => [],
-      );
+      final sessions = _sessionsByTraining.putIfAbsent(training.id, () => []);
 
       sessions.add(session);
       _hasUnsavedChanges = true;
@@ -179,18 +204,14 @@ class _TrainingScreenState extends State<TrainingScreen> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Trainingseinheit gespeichert.'),
-      ),
+      const SnackBar(content: Text('Trainingseinheit gespeichert.')),
     );
   }
 
   /// Zeigt je nach Ladezustand den passenden Inhalt.
   Widget _buildContent() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_loadError != null) {
@@ -200,10 +221,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                _loadError!,
-                textAlign: TextAlign.center,
-              ),
+              Text(_loadError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: _loadData,
@@ -222,19 +240,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.fitness_center,
-                size: 64,
-                color: Color(0xFF76FF03),
-              ),
+              Icon(Icons.fitness_center, size: 64, color: Color(0xFF76FF03)),
               SizedBox(height: 24),
               Text(
                 'Dein Training. Deine Bühne.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 12),
               Text(
@@ -254,8 +265,9 @@ class _TrainingScreenState extends State<TrainingScreen> {
       itemBuilder: (context, index) {
         final training = _trainings[index];
         final history = _sessionsByTraining[training.id];
-        final lastSession =
-            history == null || history.isEmpty ? null : history.last;
+        final lastSession = history == null || history.isEmpty
+            ? null
+            : history.last;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -264,12 +276,25 @@ class _TrainingScreenState extends State<TrainingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  training.name,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        training.name,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Training bearbeiten',
+                      icon: const Icon(Icons.edit_outlined),
+                      onPressed: _isSaving
+                          ? null
+                          : () => _editTraining(training),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -292,9 +317,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                 ],
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: _isSaving
-                      ? null
-                      : () => _startTraining(training),
+                  onPressed: _isSaving ? null : () => _startTraining(training),
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Training starten'),
                 ),
@@ -349,9 +372,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
               ),
             ),
 
-          Expanded(
-            child: _buildContent(),
-          ),
+          Expanded(child: _buildContent()),
         ],
       ),
     );
