@@ -1,3 +1,4 @@
+import 'package:repstar/models/exercise_settings.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -28,6 +29,10 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
   /// Veränderbare Satzlisten für die aktuelle Einheit.
   final Map<String, List<WorkoutSet>> _setsByExercise = {};
 
+  /// Speichert optionale Geräteeinstellungen je Übung.
+  final Map<String, ExerciseSettings> _settingsByExercise = {};
+
+
   Timer? _timer;
   Duration _elapsed = Duration.zero;
   bool _canLeave = false;
@@ -40,6 +45,19 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     for (final exercise in widget.training.exercises) {
       final previousSets =
           widget.previousSession?.setsByExercise[exercise.id];
+
+      // Liest die bisherigen Geräteeinstellungen dieser Übung.
+      final previousSettings =
+        widget.previousSession?.settingsByExercise[exercise.id];
+
+      // Geräteeinstellungen der letzten Einheit übernehmen.
+      if (previousSettings != null) {
+        // Eine eigene Kopie verhindert Änderungen an der alten Einheit.
+        _settingsByExercise[exercise.id] = ExerciseSettings(
+          seatHeight: previousSettings.seatHeight,
+          otherAdjustments: previousSettings.otherAdjustments,
+        );
+      }    
 
       if (previousSets == null || previousSets.isEmpty) {
         // Drei voneinander unabhängige Sätze für eine neue Übung.
@@ -106,6 +124,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       startedAt: _startedAt,
       endedAt: DateTime.now(),
       setsByExercise: _setsByExercise,
+      settingsByExercise: _settingsByExercise,
     );
 
     _leaveScreen(session);
@@ -198,6 +217,18 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
                     key: ValueKey(exercise.id),
                     exercise: exercise,
                     sets: _setsByExercise[exercise.id]!,
+                    settings: _settingsByExercise[exercise.id],
+                    onSettingsChanged: (settings) {
+                      setState(() {
+                        if (settings == null) {
+                          //Entfernt beide Notizfelder samt ihren werten.
+                          _settingsByExercise.remove(exercise.id);
+                        } else {
+                          // Hinterlegt die Einstellungen für diese Übung.
+                          _settingsByExercise[exercise.id] = settings;
+                        }
+                      });
+                    },
                     initiallyExpanded: index == 0,
                   );
                 },

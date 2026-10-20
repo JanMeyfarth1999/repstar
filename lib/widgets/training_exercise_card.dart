@@ -1,3 +1,4 @@
+import 'package:repstar/models/exercise_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:repstar/models/exercise.dart';
 import 'package:repstar/models/workouts_set.dart';
@@ -10,16 +11,23 @@ class TrainingExerciseCard extends StatefulWidget {
   /// Bestimmt, ob die Karte beim Öffnen bereits aufgeklappt ist.
   final bool initiallyExpanded;
 
+  /// Optionale Geräteeinstellungen für diese Übung.
+  final ExerciseSettings? settings;
+
+  /// Meldet hinzugefügte oder entfernte Einstellungen an den Trainingsbildschirm.
+  final ValueChanged<ExerciseSettings?> onSettingsChanged;
+
   const TrainingExerciseCard({
     super.key,
     required this.exercise,
     required this.sets,
+    required this.settings,
+    required this.onSettingsChanged,
     this.initiallyExpanded = false,
   });
 
   @override
-  State<TrainingExerciseCard> createState() =>
-      _TrainingExerciseCardState();
+  State<TrainingExerciseCard> createState() => _TrainingExerciseCardState();
 }
 
 class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
@@ -144,6 +152,64 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
     );
   }
 
+  Widget _buildSettingsFields() {
+    final settings = widget.settings;
+
+    if (settings == null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () {
+            widget.onSettingsChanged(ExerciseSettings());
+          },
+          icon: const Icon(Icons.add),
+          label: const Text('Geräteeinstellungen hinzufügen'),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(child: Text('Geräteeinstellungen')),
+            IconButton(
+              tooltip: 'Geräteeinstellungen entfernen',
+              onPressed: () {
+                widget.onSettingsChanged(null);
+              },
+              icon: const Icon(Icons.remove_circle_outline),
+            ),
+          ],
+        ),
+        TextFormField(
+          initialValue: settings.seatHeight,
+          decoration: const InputDecoration(
+            labelText: 'Sitzhöhe',
+            hintText: 'Loch...',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (value) {
+            settings.seatHeight = value;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          initialValue: settings.otherAdjustments,
+          decoration: const InputDecoration(
+            labelText: 'Sonstige Verstellmöglichkeiten',
+            hintText: 'Loch...',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (value) {
+            settings.otherAdjustments = value;
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final completedSets = widget.sets
@@ -189,6 +255,10 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
               ),
             ),
           ),
+          const SizedBox(height: 16),
+
+          // Zeigt die optionalen Geräteeinstellungen oberhalb der Sätze.
+          _buildSettingsFields(),
           const SizedBox(height: 16),
 
           // Für jeden Satz wird dieselbe Zeilen-Methode aufgerufen.
