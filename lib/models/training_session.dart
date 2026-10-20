@@ -33,4 +33,44 @@ class TrainingSession {
 
   /// Berechnet die gesamte Trainingsdauer.
   Duration get duration => endedAt.difference(startedAt);
+
+  /// Wandelt die Trainigseinheit in speicherbare Daten um.
+  Map<String, dynamic> toJson() {
+    return {
+      'trainingsPlanId': trainingPlanId,
+
+      // Zeitpunte als Text speichern.
+      'startedAt': startedAt.toIso8601String(),
+      'endeAt': startedAt.toIso8601String(),
+
+      // Jeder Satz verwendet seine eigene toJson-Methode.
+      'setByExercise': setsByExercise.map(
+        (exerciseId, sets) => MapEntry(
+          exerciseId,
+          sets.map((workoutSet) => workoutSet.toJson()).toList(),
+        ),
+      ),
+    };
+  }
+
+  /// Stellt die Trainingseinheit aus gespeicherten Daten wieder her
+  factory TrainingSession.fromJson(Map<String, dynamic> json) {
+    final exerciseData = json['setByexercise'] as Map<String, dynamic>;
+
+    return TrainingSession(
+      trainingPlanId: json['trainingPlanId'] as String,
+      startedAt: DateTime.parse(json['startedAt'] as String),
+      endedAt: DateTime.parse(json['endedAt'] as String),
+      setsByExercise: exerciseData.map((exerciseId, value) {
+        final setData = value as List<dynamic>;
+
+        return MapEntry(
+          exerciseId,
+          setData.map((item) {
+            return WorkoutSet.fromJson(item as Map<String, dynamic>);
+          }).toList(),
+        );
+      }),
+    );
+  }
 }
