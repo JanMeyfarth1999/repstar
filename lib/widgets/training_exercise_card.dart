@@ -18,7 +18,7 @@ class TrainingExerciseCard extends StatefulWidget {
   final ValueChanged<ExerciseSettings?> onSettingsChanged;
 
   /// Meldet erfolgreichen abgehakten Satz an den Trainingsbildschirm.
-  final VoidCallBack onSetCompleted;
+  final VoidCallback onSetCompleted;
 
   const TrainingExerciseCard({
     super.key,
