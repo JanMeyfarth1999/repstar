@@ -1,7 +1,18 @@
+import 'package:repstar/services/rest_notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:repstar/screens/training_screen.dart';
 
-void main() {
+Future<void> main() async {
+  // Ermöglicht den Zugriff auf Gerätefunktionen vor runApp().
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await RestNotificationService.instance.initialize();
+  } catch (error) {
+    // Die App bleibt auch bei einem Einrichtungsfehler startbar.
+    debugPrint('Benachrichtigungen konnten nicht eingerichtet werden: $error');
+  }
+
   runApp(const RepStarApp());
 }
 

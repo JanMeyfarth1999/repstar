@@ -1,5 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 <uses-permission android:name="android.permission.VIBRATE" />
+<!-- Erlaubt das Anzeigen von Benachrichtigungen. -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+<!-- Ermöglicht nach Nutzerfreigabe zeitgenaue Pausensignale. -->
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <application
         android:label="repstar"
         android:name="${applicationName}"
@@ -26,6 +31,10 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Empfängt den geplanten Alarm und zeigt die Benachrichtigung an. -->
+<receiver
+    android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+    android:exported="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
