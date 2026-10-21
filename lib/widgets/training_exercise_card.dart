@@ -17,12 +17,16 @@ class TrainingExerciseCard extends StatefulWidget {
   /// Meldet hinzugefügte oder entfernte Einstellungen an den Trainingsbildschirm.
   final ValueChanged<ExerciseSettings?> onSettingsChanged;
 
+  /// Meldet erfolgreichen abgehakten Satz an den Trainingsbildschirm.
+  final VoidCallBack onSetCompleted;
+
   const TrainingExerciseCard({
     super.key,
     required this.exercise,
     required this.sets,
     required this.settings,
     required this.onSettingsChanged,
+    required this.onSetCompleted,
     this.initiallyExpanded = false,
   });
 
@@ -73,6 +77,11 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
     }
     setState(() {
       workoutSet.isCompleted = !workoutSet.isCompleted;
+
+      // Nur beim Setzen des Häkchens eine neue Pause starten.
+      if (workoutSet.isCompleted) {
+        widget.onSetCompleted();
+      }
     });
   }
 
@@ -110,6 +119,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
                   workoutSet.repetitions = int.tryParse(value.trim());
 
                   // Geänderte werte müssen erneut bestätigt werden.
+                  workoutSet.isCompleted = false;
                 });
               },
             ),
