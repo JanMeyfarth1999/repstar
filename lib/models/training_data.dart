@@ -6,9 +6,13 @@ class TrainingData {
   final List<TrainingPlan> trainings;
   final Map<String, List<TrainingSession>> sessionsByTraining;
 
+  /// Aktuelles Körpergewicht; null bedeutet „noch nicht angegeben“.
+  final double? bodyWeightKg;
+
   TrainingData({
     required this.trainings,
     required this.sessionsByTraining,
+    this.bodyWeightKg,
   });
 
   /// Erstellt den Anfangszustand ohne gespeicherte Trainings.
@@ -19,10 +23,11 @@ class TrainingData {
     );
   }
 
-  /// Wandelt Vorlagen und Verlauf in speicherbare Daten um.
+  /// Wandelt Vorlagen, Verlauf und Körpergewicht in speicherbare Daten um.
   Map<String, dynamic> toJson() {
     return {
-      'version': 1,
+      'version': 2,
+      'bodyWeightKg': bodyWeightKg,
       'trainings': trainings
           .map((training) => training.toJson())
           .toList(),
@@ -35,10 +40,12 @@ class TrainingData {
     };
   }
 
-  /// Stellt Vorlagen und Verlauf aus gespeicherten Daten wieder her.
+  /// Stellt die App-Daten aus dem bisherigen oder neuen Format wieder her.
   factory TrainingData.fromJson(Map<String, dynamic> json) {
-    // Verhindert, dass ein unbekanntes Dateiformat falsch geladen wird.
-    if (json['version'] != 1) {
+    final version = json['version'];
+
+    // Bestehende Dateien der Version 1 bleiben lesbar.
+    if (version != 1 && version != 2) {
       throw const FormatException('Unbekanntes Speicherformat.');
     }
 
@@ -47,6 +54,8 @@ class TrainingData {
         json['sessionsByTraining'] as Map<String, dynamic>;
 
     return TrainingData(
+      // Akzeptiert ganze Zahlen und Kommazahlen. Fehlende Werte bleiben null.
+      bodyWeightKg: (json['bodyWeightKg'] as num?)?.toDouble(),
       trainings: trainingData.map((item) {
         return TrainingPlan.fromJson(item as Map<String, dynamic>);
       }).toList(),

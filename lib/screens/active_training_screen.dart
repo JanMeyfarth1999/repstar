@@ -1,12 +1,12 @@
-import 'package:vibration/vibration.dart';
-import 'package:repstar/models/exercise_settings.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:repstar/models/exercise_settings.dart';
 import 'package:repstar/models/training_plan.dart';
 import 'package:repstar/models/training_session.dart';
 import 'package:repstar/models/workouts_set.dart';
 import 'package:repstar/widgets/training_exercise_card.dart';
+import 'package:vibration/vibration.dart';
 
 /// Zeigt das laufende Training mit Timer und Übungskarten.
 class ActiveTrainingScreen extends StatefulWidget {
@@ -20,7 +20,8 @@ class ActiveTrainingScreen extends StatefulWidget {
   });
 
   @override
-  State<ActiveTrainingScreen> createState() => _ActiveTrainingScreenState();
+  State<ActiveTrainingScreen> createState() =>
+      _ActiveTrainingScreenState();
 }
 
 class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
@@ -29,18 +30,27 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
   /// Veränderbare Satzlisten für die aktuelle Einheit.
   final Map<String, List<WorkoutSet>> _setsByExercise = {};
 
-  /// Speichert optionale Geräteeinstellungen je Übung.
+  /// Optionale Geräteeinstellungen je Übung.
   final Map<String, ExerciseSettings> _settingsByExercise = {};
+
+  /// Ordnet jeder Karte eine Kennung für das automatische Scrollen zu.
+  final Map<String, GlobalKey> _exerciseKeys = {};
+
+  /// Es ist jeweils höchstens eine Übung aufgeklappt.
+  String? _expandedExerciseId;
+
+  /// Nach dem Aufklappen soll diese Übung sichtbar gemacht werden.
+  String? _pendingScrollExerciseId;
 
   Timer? _timer;
   Duration _elapsed = Duration.zero;
 
-  /// Gewählte Pausenlänge; gilt für die nächste gestartete Pause.
+  /// Gewählte Pausenlänge für die nächste gestartete Pause.
   int _restDurationSeconds = 90;
 
-  /// Die Endzeit verhindert, dass verzögerte Updates den Countdown verlängern.
   DateTime? _restEndsAt;
   int _restRemainingSeconds = 0;
+
   bool _canLeave = false;
   bool _exitDialogOpen = false;
 
@@ -49,13 +59,14 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     super.initState();
 
     for (final exercise in widget.training.exercises) {
-      final previousSets = widget.previousSession?.setsByExercise[exercise.id];
+      _exerciseKeys[exercise.id] = GlobalKey();
 
-      // Liest die bisherigen Geräteeinstellungen dieser Übung.
+      final previousSets =
+          widget.previousSession?.setsByExercise[exercise.id];
+
       final previousSettings =
           widget.previousSession?.settingsByExercise[exercise.id];
 
-      // Geräteeinstellungen der letzten Einheit übernehmen.
       if (previousSettings != null) {
         // Eine eigene Kopie verhindert Änderungen an der alten Einheit.
         _settingsByExercise[exercise.id] = ExerciseSettings(
@@ -65,10 +76,12 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       }
 
       if (previousSets == null || previousSets.isEmpty) {
-        // Drei voneinander unabhängige Sätze für eine neue Übung.
-        _setsByExercise[exercise.id] = List.generate(3, (_) => WorkoutSet());
+        _setsByExercise[exercise.id] = List.generate(
+          3,
+          (_) => WorkoutSet(),
+        );
       } else {
-        // Letzte Werte übernehmen; Häkchen starten wieder leer.
+        // Letzte Werte übernehmen; die Häkchen starten wieder leer.
         _setsByExercise[exercise.id] = previousSets
             .map(
               (workoutSet) => WorkoutSet(
@@ -80,8 +93,138 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       }
     }
 
-    // Ein gemeinsamer Tmer aktualisiert Trainingsdauer und Pausenanzeige.
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _updateTimers());
+    if (widget.training.exercises.isNotEmpty) {
+      _expandedExerciseId = widget.training.exercises.first.id;
+    }
+
+    // Ein gemeinsamer Timer aktualisiert Trainingsdauer und Pausenanzeige.
+    _timer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _updateTimers(),
+    );
+  }
+
+  /// Prüft, ob wirklich alle vorhandenen Sätze einer Übung abgehakt sind.
+  bool _isExerciseCompleted(String exerciseId) {
+    final sets = _setsByExercise[exerciseId];
+
+    return sets != null &&
+        sets.isNotEmpty &&
+        sets.every((workoutSet) => workoutSet.isCompleted);
+  }
+
+  /// Sucht die nächste offene Übung in der Trainingsreihenfolge.
+  String? _findNextIncompleteExercise(String currentExerciseId) {
+    final exercises = widget.training.exercises;
+    final currentIndex = exercises.indexWhere(
+      (exercise) => exercise.id == currentExerciseId,
+    );
+
+    if (currentIndex == -1) {
+      return null;
+    }
+
+    // Am Listenende auch zuvor übersprungene Übungen berücksichtigen.
+    for (int offset = 1; offset < exercises.length; offset++) {
+      final index = (currentIndex + offset) % exercises.length;
+      final exerciseId = exercises[index].id;
+
+      if (!_isExerciseCompleted(exerciseId)) {
+        return exerciseId;
+      }
+    }
+
+    return null;
+  }
+
+  /// Startet die Pause und wechselt bei abgeschlossener Übung weiter.
+  void _onSetCompleted(String exerciseId) {
+    if (!mounted || _canLeave) {
+      return;
+    }
+
+    _startRest();
+
+    // Solange noch Sätze fehlen, bleibt die aktuelle Karte geöffnet.
+    if (!_isExerciseCompleted(exerciseId)) {
+      return;
+    }
+
+    final nextExerciseId = _findNextIncompleteExercise(exerciseId);
+
+    // Beim Wechsel die Bildschirmtastatur schließen.
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _expandedExerciseId = nextExerciseId;
+      _pendingScrollExerciseId = nextExerciseId;
+    });
+
+    if (nextExerciseId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Alle Übungen erledigt! Du kannst dein Training jetzt beenden.',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Ermöglicht weiterhin das manuelle Öffnen und Schließen einer Karte.
+  void _onExpansionChanged(String exerciseId, bool expanded) {
+    if (_canLeave) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      if (expanded) {
+        _expandedExerciseId = exerciseId;
+        _pendingScrollExerciseId = exerciseId;
+      } else if (_expandedExerciseId == exerciseId) {
+        _expandedExerciseId = null;
+        _pendingScrollExerciseId = null;
+      }
+    });
+  }
+
+  /// Scrollt nach der Aufklappanimation einmal zur ausgewählten Karte.
+  void _onExpansionAnimationEnd(String exerciseId) {
+    if (!mounted ||
+        _canLeave ||
+        _expandedExerciseId != exerciseId ||
+        _pendingScrollExerciseId != exerciseId) {
+      return;
+    }
+
+    // Spätere Größenänderungen, etwa durch ein geladenes Bild,
+    // sollen kein erneutes automatisches Scrollen auslösen.
+    _pendingScrollExerciseId = null;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _canLeave ||
+          _expandedExerciseId != exerciseId) {
+        return;
+      }
+
+      final cardContext = _exerciseKeys[exerciseId]?.currentContext;
+
+      if (cardContext == null) {
+        return;
+      }
+
+      unawaited(
+        Scrollable.ensureVisible(
+          cardContext,
+          alignment: 0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        ),
+      );
+    });
   }
 
   /// Aktualisiert beide Anzeigen und erkennt das Ende einer Pause.
@@ -101,14 +244,13 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
         final remaining = restEndsAt.difference(now);
 
         if (remaining <= Duration.zero) {
-          // Die Endzeit löschen, damit das Signal nur einmal ausgelöst wird.
           _restEndsAt = null;
           _restRemainingSeconds = 0;
           restFinished = true;
         } else {
-          // Aufrunden: Eine noch laufende Pause zeigt mindestens 1 Sekunde.
           _restRemainingSeconds =
-              (remaining.inMicroseconds / Duration.microsecondsPerSecond)
+              (remaining.inMicroseconds /
+                      Duration.microsecondsPerSecond)
                   .ceil();
         }
       }
@@ -118,19 +260,23 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       unawaited(_vibrateRestEnd());
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pause vorbei – weiter geht’s!')),
+        const SnackBar(
+          content: Text('Pause vorbei – weiter geht’s!'),
+        ),
       );
     }
   }
 
-  /// Startet nach einem Satz eine neue Pause mit der gewählten Länge.
+  /// Startet nach einem Satz eine neue Pause.
   void _startRest() {
     if (_canLeave) {
       return;
     }
 
     setState(() {
-      _restEndsAt = DateTime.now().add(Duration(seconds: _restDurationSeconds));
+      _restEndsAt = DateTime.now().add(
+        Duration(seconds: _restDurationSeconds),
+      );
       _restRemainingSeconds = _restDurationSeconds;
     });
   }
@@ -164,12 +310,11 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     });
   }
 
-  /// Löst ein kurzes Vibrationssignal aus, sofern das Gerät es unterstützt.
+  /// Löst ein kurzes Vibrationssignal aus.
   Future<void> _vibrateRestEnd() async {
     try {
       final hasVibrator = await Vibration.hasVibrator();
 
-      // Nach dem Verlassen oder einem neuen Pausenstart kein altes Signal senden.
       if (!mounted || _canLeave || _restEndsAt != null) {
         return;
       }
@@ -178,7 +323,6 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
         await Vibration.vibrate(duration: 500);
       }
     } catch (error) {
-      // Ein Vibrationsfehler unterbricht das Training nicht.
       debugPrint('Vibration fehlgeschlagen: $error');
     }
   }
@@ -186,8 +330,10 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
   /// Formatiert die Dauer beispielsweise als 00:12:35.
   String _formatDuration(Duration duration) {
     final hours = duration.inHours.toString().padLeft(2, '0');
-    final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    final minutes =
+        (duration.inMinutes % 60).toString().padLeft(2, '0');
+    final seconds =
+        (duration.inSeconds % 60).toString().padLeft(2, '0');
 
     return '$hours:$minutes:$seconds';
   }
@@ -202,9 +348,9 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
 
     setState(() {
       _canLeave = true;
+      _pendingScrollExerciseId = null;
     });
 
-    // Erst die Zurück-Sperre aktualisieren, dann den Bildschirm schließen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         Navigator.of(context).pop<TrainingSession>(session);
@@ -212,7 +358,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     });
   }
 
-  /// Beendet den Timer und erstellt die abgeschlossene Einheit.
+  /// Erstellt die abgeschlossene Einheit.
   void _finishTraining() {
     final session = TrainingSession(
       trainingPlanId: widget.training.id,
@@ -269,8 +415,10 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
   /// Zeigt Pausenlänge, Countdown und Steuerung.
   Widget _buildRestTimer() {
     final isResting = _restEndsAt != null;
-    final minutes = (_restRemainingSeconds ~/ 60).toString().padLeft(2, '0');
-    final seconds = (_restRemainingSeconds % 60).toString().padLeft(2, '0');
+    final minutes =
+        (_restRemainingSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds =
+        (_restRemainingSeconds % 60).toString().padLeft(2, '0');
 
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -280,8 +428,13 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isResting ? 'Satzpause: $minutes:$seconds' : 'Pausentimer bereit',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              isResting
+                  ? 'Satzpause: $minutes:$seconds'
+                  : 'Pausentimer bereit',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             Row(
               children: [
@@ -299,7 +452,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
                   onChanged: (value) {
                     if (value != null) {
                       setState(() {
-                        // Eine laufende Pause behält ihre bisherige Endzeit.
+                        // Gilt für die nächste gestartete Pause.
                         _restDurationSeconds = value;
                       });
                     }
@@ -328,6 +481,43 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     );
   }
 
+  /// Baut alle Karten, damit auch entfernte Scrollziele erreichbar sind.
+  Widget _buildExerciseList() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        children: [
+          for (final exercise in widget.training.exercises)
+            TrainingExerciseCard(
+              key: _exerciseKeys[exercise.id],
+              exercise: exercise,
+              sets: _setsByExercise[exercise.id]!,
+              settings: _settingsByExercise[exercise.id],
+              isExpanded: _expandedExerciseId == exercise.id,
+              onExpansionChanged: (expanded) {
+                _onExpansionChanged(exercise.id, expanded);
+              },
+              onExpansionAnimationEnd: () {
+                _onExpansionAnimationEnd(exercise.id);
+              },
+              onSetCompleted: () {
+                _onSetCompleted(exercise.id);
+              },
+              onSettingsChanged: (settings) {
+                setState(() {
+                  if (settings == null) {
+                    _settingsByExercise.remove(exercise.id);
+                  } else {
+                    _settingsByExercise[exercise.id] = settings;
+                  }
+                });
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope<TrainingSession>(
@@ -338,7 +528,9 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: Text(widget.training.name)),
+        appBar: AppBar(
+          title: Text(widget.training.name),
+        ),
         body: Column(
           children: [
             Padding(
@@ -361,36 +553,9 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
                 ],
               ),
             ),
-            // Die Pause bleibt oberhalb der Übungsliste sichtbar.
             _buildRestTimer(),
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                itemCount: widget.training.exercises.length,
-                itemBuilder: (context, index) {
-                  final exercise = widget.training.exercises[index];
-
-                  return TrainingExerciseCard(
-                    key: ValueKey(exercise.id),
-                    exercise: exercise,
-                    sets: _setsByExercise[exercise.id]!,
-                    onSetCompleted: _startRest,
-                    settings: _settingsByExercise[exercise.id],
-                    onSettingsChanged: (settings) {
-                      setState(() {
-                        if (settings == null) {
-                          //Entfernt beide Notizfelder samt ihren werten.
-                          _settingsByExercise.remove(exercise.id);
-                        } else {
-                          // Hinterlegt die Einstellungen für diese Übung.
-                          _settingsByExercise[exercise.id] = settings;
-                        }
-                      });
-                    },
-                    initiallyExpanded: index == 0,
-                  );
-                },
-              ),
+              child: _buildExerciseList(),
             ),
           ],
         ),

@@ -1,23 +1,21 @@
-import 'package:repstar/models/exercise_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:repstar/models/exercise.dart';
+import 'package:repstar/models/exercise_settings.dart';
 import 'package:repstar/models/workouts_set.dart';
+import 'package:repstar/widgets/exercise_image.dart';
 
 /// Zeigt eine Übung mit ihren bearbeitbaren Trainingssätzen.
 class TrainingExerciseCard extends StatefulWidget {
   final Exercise exercise;
   final List<WorkoutSet> sets;
-
-  /// Bestimmt, ob die Karte beim Öffnen bereits aufgeklappt ist.
-  final bool initiallyExpanded;
-
-  /// Optionale Geräteeinstellungen für diese Übung.
   final ExerciseSettings? settings;
 
-  /// Meldet hinzugefügte oder entfernte Einstellungen an den Trainingsbildschirm.
-  final ValueChanged<ExerciseSettings?> onSettingsChanged;
+  /// Der Trainingsbildschirm bestimmt, welche Karte geöffnet ist.
+  final bool isExpanded;
 
-  /// Meldet erfolgreichen abgehakten Satz an den Trainingsbildschirm.
+  final ValueChanged<bool> onExpansionChanged;
+  final VoidCallback onExpansionAnimationEnd;
+  final ValueChanged<ExerciseSettings?> onSettingsChanged;
   final VoidCallback onSetCompleted;
 
   const TrainingExerciseCard({
@@ -25,18 +23,20 @@ class TrainingExerciseCard extends StatefulWidget {
     required this.exercise,
     required this.sets,
     required this.settings,
+    required this.isExpanded,
+    required this.onExpansionChanged,
+    required this.onExpansionAnimationEnd,
     required this.onSettingsChanged,
     required this.onSetCompleted,
-    this.initiallyExpanded = false,
   });
 
   @override
-  State<TrainingExerciseCard> createState() => _TrainingExerciseCardState();
+  State<TrainingExerciseCard> createState() =>
+      _TrainingExerciseCardState();
 }
 
 class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
-  /// Ergänz einen neuen, leeren Satz.
-
+  /// Ergänzt einen neuen, leeren Satz.
   void _addSet() {
     setState(() {
       widget.sets.add(WorkoutSet());
@@ -75,23 +75,23 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
         return;
       }
     }
+
     setState(() {
       workoutSet.isCompleted = !workoutSet.isCompleted;
-
-      // Nur beim Setzen des Häkchens eine neue Pause starten.
-      if (workoutSet.isCompleted) {
-        widget.onSetCompleted();
-      }
     });
+
+    // Der Bildschirm prüft danach auch den Abschluss der ganzen Übung.
+    if (workoutSet.isCompleted) {
+      widget.onSetCompleted();
+    }
   }
 
-  /// Baut eine Satzzeile. Diese Darstellung verwenden alle Sätze.
+  /// Baut die gemeinsame Darstellung einer Satzzeile.
   Widget _buildSetRow(int index) {
     final workoutSet = widget.sets[index];
     final accentColor = Theme.of(context).colorScheme.primary;
 
     return Padding(
-      // Die Kennung hält Eingabefelder beim Entfernen beim richtigen Satz.
       key: ObjectKey(workoutSet),
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -101,7 +101,9 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
             child: Text(
               '${index + 1}',
               style: TextStyle(
-                color: workoutSet.isCompleted ? accentColor : Colors.white70,
+                color: workoutSet.isCompleted
+                    ? accentColor
+                    : Colors.white70,
               ),
             ),
           ),
@@ -117,8 +119,6 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
               onChanged: (value) {
                 setState(() {
                   workoutSet.repetitions = int.tryParse(value.trim());
-
-                  // Geänderte werte müssen erneut bestätigt werden.
                   workoutSet.isCompleted = false;
                 });
               },
@@ -138,7 +138,6 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
               ),
               onChanged: (value) {
                 setState(() {
-                  // Unterstützt beispielsweise 35,5 und 35.5.
                   workoutSet.weight = double.tryParse(
                     value.trim().replaceAll(',', '.'),
                   );
@@ -155,13 +154,16 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
           IconButton(
             tooltip: 'Satz entfernen',
             icon: const Icon(Icons.remove_circle_outline),
-            onPressed: widget.sets.length > 1 ? () => _removeSet(index) : null,
+            onPressed: widget.sets.length > 1
+                ? () => _removeSet(index)
+                : null,
           ),
         ],
       ),
     );
   }
 
+  /// Zeigt die optionalen Geräteeinstellungen.
   Widget _buildSettingsFields() {
     final settings = widget.settings;
 
@@ -179,11 +181,14 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
     }
 
     return Column(
+      key: ObjectKey(settings),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Expanded(child: Text('Geräteeinstellungen')),
+            const Expanded(
+              child: Text('Geräteeinstellungen'),
+            ),
             IconButton(
               tooltip: 'Geräteeinstellungen entfernen',
               onPressed: () {
@@ -197,7 +202,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
           initialValue: settings.seatHeight,
           decoration: const InputDecoration(
             labelText: 'Sitzhöhe',
-            hintText: 'Loch...',
+            hintText: 'Loch …',
             border: OutlineInputBorder(),
           ),
           onChanged: (value) {
@@ -209,7 +214,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
           initialValue: settings.otherAdjustments,
           decoration: const InputDecoration(
             labelText: 'Sonstige Verstellmöglichkeiten',
-            hintText: 'Loch...',
+            hintText: 'Loch …',
             border: OutlineInputBorder(),
           ),
           onChanged: (value) {
@@ -220,58 +225,25 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final completedSets = widget.sets
-        .where((workoutSet) => workoutSet.isCompleted)
-        .length;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        initiallyExpanded: widget.initiallyExpanded,
-        tilePadding: const EdgeInsets.all(12),
-        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-
-        // Auch bei geschlossener Karte bleibt ein kleines Bild sichtbar.
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            width: 56,
-            height: 56,
-            color: Colors.white,
-            child: Image.asset(widget.exercise.imagePath, fit: BoxFit.contain),
-          ),
-        ),
-        title: Text(
-          widget.exercise.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          '$completedSets von ${widget.sets.length} Sätzen erledigt.',
-        ),
+  /// Inhalt der aufgeklappten Karte.
+  Widget _buildExpandedContent() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Das große Bild erscheint beim Aufklappen
-          // Die Höhe passt sich dem Bildformat an, ohne seitliche Freiflächen.
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.asset(
-              widget.exercise.imagePath,
+            child: ExerciseImage(
+              imagePath: widget.exercise.imagePath,
               width: double.infinity,
-              fit: BoxFit.contain,
             ),
           ),
           const SizedBox(height: 16),
-
-          // Zeigt die optionalen Geräteeinstellungen oberhalb der Sätze.
           _buildSettingsFields(),
           const SizedBox(height: 16),
-
-          // Für jeden Satz wird dieselbe Zeilen-Methode aufgerufen.
           for (int index = 0; index < widget.sets.length; index++)
             _buildSetRow(index),
-
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
@@ -279,6 +251,76 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
               icon: const Icon(Icons.add),
               label: const Text('Satz hinzufügen'),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final completedSets = widget.sets
+        .where((workoutSet) => workoutSet.isCompleted)
+        .length;
+
+    final allCompleted =
+        widget.sets.isNotEmpty && completedSets == widget.sets.length;
+
+    final accentColor = Theme.of(context).colorScheme.primary;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.all(12),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: ExerciseImage(
+                imagePath: widget.exercise.imagePath,
+                width: 56,
+                height: 56,
+              ),
+            ),
+            title: Text(
+              widget.exercise.name,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: Text(
+              '$completedSets von ${widget.sets.length} Sätzen erledigt.',
+              style: TextStyle(
+                color: allCompleted ? accentColor : null,
+              ),
+            ),
+            trailing: Icon(
+              widget.isExpanded
+                  ? Icons.expand_less
+                  : Icons.expand_more,
+              color: allCompleted ? accentColor : null,
+            ),
+            onTap: () {
+              widget.onExpansionChanged(!widget.isExpanded);
+            },
+          ),
+
+          // Das Öffnen und Schließen wird vom Trainingsbildschirm gesteuert.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            onEnd: widget.isExpanded
+                ? widget.onExpansionAnimationEnd
+                : null,
+            child: widget.isExpanded
+                ? _buildExpandedContent()
+                : const SizedBox(
+                    width: double.infinity,
+                    height: 0,
+                  ),
           ),
         ],
       ),

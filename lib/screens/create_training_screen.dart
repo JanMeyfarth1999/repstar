@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:repstar/data/exercise_library.dart';
 import 'package:repstar/models/exercise.dart';
 import 'package:repstar/models/training_plan.dart';
+import 'package:repstar/widgets/exercise_image.dart';
 
 /// Ermöglicht das Benennen eines Trainings und die Übungsauswahl.
 class CreateTrainingScreen extends StatefulWidget {
   /// Beim Bearbeiten wird die vorhandene Vorlage übergeben.
   final TrainingPlan? initialTraining;
 
-  const CreateTrainingScreen({super.key, this.initialTraining});
+  const CreateTrainingScreen({
+    super.key,
+    this.initialTraining,
+  });
 
   @override
-  State<CreateTrainingScreen> createState() => _CreateTrainingScreenState();
+  State<CreateTrainingScreen> createState() =>
+      _CreateTrainingScreenState();
 }
 
 class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
@@ -30,7 +35,7 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
     final training = widget.initialTraining;
 
     if (training != null) {
-      // Vorhandenen Namen und Übungen zum bearbeiten übernehemen.
+      // Vorhandenen Namen und Übungen zum Bearbeiten übernehmen.
       _nameController.text = training.name;
 
       // Die Auswahl erhält eine eigene Liste.
@@ -40,14 +45,18 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
 
   /// Prüft anhand der Kennung, ob eine Übung ausgewählt ist.
   bool _isSelected(Exercise exercise) {
-    return _selectedExercises.any((item) => item.id == exercise.id);
+    return _selectedExercises.any(
+      (item) => item.id == exercise.id,
+    );
   }
 
   /// Fügt eine Übung hinzu oder entfernt sie aus der Auswahl.
   void _toggleExercise(Exercise exercise) {
     setState(() {
       if (_isSelected(exercise)) {
-        _selectedExercises.removeWhere((item) => item.id == exercise.id);
+        _selectedExercises.removeWhere(
+          (item) => item.id == exercise.id,
+        );
       } else {
         _selectedExercises.add(exercise);
       }
@@ -57,7 +66,7 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
   /// Verschiebt eine Übung innerhalb der Trainingsreihenfolge.
   void _reorderExercises(int oldIndex, int newIndex) {
     setState(() {
-      // Beim verschieben nach unten verschiebt das Entfernen den Zielindex.
+      // Beim Verschieben nach unten verändert das Entfernen den Zielindex.
       if (newIndex > oldIndex) {
         newIndex -= 1;
       }
@@ -83,15 +92,13 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
     }
 
     final training = TrainingPlan(
-      // Beib bearbeiten bleibt die Kennung samt Trainingshistorie erhalten.
-      id:
-          widget.initialTraining?.id ??
+      // Beim Bearbeiten bleibt die Kennung samt Trainingshistorie erhalten.
+      id: widget.initialTraining?.id ??
           DateTime.now().microsecondsSinceEpoch.toString(),
       name: name,
       exercises: _selectedExercises,
     );
 
-    // Schließt den Bildschirm und liefert das erstellte Training zurück.
     Navigator.of(context).pop<TrainingPlan>(training);
   }
 
@@ -101,7 +108,7 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
     super.dispose();
   }
 
-  /// Zeigt die ausgewählten Ünungen in ihrer Trainingsreihenfolge.
+  /// Zeigt die ausgewählten Übungen in ihrer Trainingsreihenfolge.
   Widget _buildSelectedExercises() {
     if (_selectedExercises.isEmpty) {
       return const SizedBox.shrink();
@@ -136,7 +143,9 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                   key: ValueKey(exercise.id),
                   leading: SizedBox(
                     width: 28,
-                    child: Center(child: Text('${index + 1}')),
+                    child: Center(
+                      child: Text('${index + 1}'),
+                    ),
                   ),
                   title: Text(
                     exercise.name,
@@ -175,15 +184,18 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
   @override
   Widget build(BuildContext context) {
     final accentColor = Theme.of(context).colorScheme.primary;
-    // Jede vorhandene Muskelgruppe einmal anzeigen und alphabetisch sortieren.
-    final muscleGroups =
-        exerciseLibrary.map((exercise) => exercise.muscleGroup).toSet().toList()
-          ..sort();
 
-    // Der Filter ändert nur die Anzeige, nicht die ausgewählten Übungen.
-    final filteredExercises = exerciseLibrary.where((exerise) {
+    // Jede vorhandene Muskelgruppe einmal anzeigen und sortieren.
+    final muscleGroups = exerciseLibrary
+        .map((exercise) => exercise.muscleGroup)
+        .toSet()
+        .toList()
+      ..sort();
+
+    // Der Filter verändert nur die Anzeige, nicht die Auswahl.
+    final filteredExercises = exerciseLibrary.where((exercise) {
       return _selectedMuscleGroup == null ||
-          exerise.muscleGroup == _selectedMuscleGroup;
+          exercise.muscleGroup == _selectedMuscleGroup;
     }).toList();
 
     return Scaffold(
@@ -220,7 +232,7 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Die Filterleiste lässt sich bei wenig Platz seitlich scrollen.
+          // Bei wenig Platz lässt sich die Filterleiste seitlich scrollen.
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -244,7 +256,8 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                       onSelected: (selected) {
                         setState(() {
                           // Erneutes Antippen hebt den Filter auf.
-                          _selectedMuscleGroup = selected ? muscleGroup : null;
+                          _selectedMuscleGroup =
+                              selected ? muscleGroup : null;
                         });
                       },
                     ),
@@ -252,7 +265,6 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: 12),
           Expanded(
             child: ListView.builder(
@@ -263,12 +275,12 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                 if (index == 0) {
                   return _buildSelectedExercises();
                 }
-                // Die Übungsbibliothek beginnt hinter dem zusätlichen ersten Eintrag.
+
                 final exercise = filteredExercises[index - 1];
                 final isSelected = _isSelected(exercise);
 
-                // Dieselbe Karte stellt jede Übung aus der Liste dar.
                 return Card(
+                  key: ValueKey(exercise.id),
                   margin: const EdgeInsets.only(bottom: 12),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
@@ -276,14 +288,12 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Container(
+
+                          // Vorhandenes Bild oder neutrales Übungssymbol.
+                          child: ExerciseImage(
+                            imagePath: exercise.imagePath,
                             width: 80,
                             height: 80,
-                            color: Colors.white,
-                            child: Image.asset(
-                              exercise.imagePath,
-                              fit: BoxFit.contain,
-                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -302,7 +312,9 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                               Text(
                                 '${exercise.muscleGroup} · '
                                 '${exercise.equipment}',
-                                style: const TextStyle(color: Colors.white70),
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                ),
                               ),
                             ],
                           ),
