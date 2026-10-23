@@ -3,8 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:repstar/data/level_library.dart';
 import 'package:repstar/models/level_progress.dart';
+import 'package:repstar/services/training_reward_service.dart';
 
-/// Zeigt Rang, Monatspunkte und die Grenze für den Klassenerhalt.
+/// Zeigt Rang und Monatsfortschritt im hellen und dunklen Design.
 class RankScreen extends StatelessWidget {
   final LevelProgress progress;
   final int monthlyXp;
@@ -17,8 +18,6 @@ class RankScreen extends StatelessWidget {
     required this.now,
   });
 
-  static const Color _maintenanceColor = Color(0xFFFFC857);
-
   String _formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
@@ -27,11 +26,13 @@ class RankScreen extends StatelessWidget {
   }
 
   void _showRules(BuildContext context) {
+    final minimumMinutes = TrainingRewardService.minimumXpDuration.inMinutes;
+
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('So funktioniert dein Rang'),
-        content: const SingleChildScrollView(
+        content: SingleChildScrollView(
           child: Text(
             'Jede Runde dauert einen Kalendermonat und endet am '
             '1. des nächsten Monats um 00:00 Uhr UTC.\n\n'
@@ -50,7 +51,7 @@ class RankScreen extends StatelessWidget {
             'Rangwechsel erfolgen zum Monatswechsel. '
             'Danach beginnen die Monatspunkte wieder bei null. '
             'Deine Trainingseinheiten bleiben gespeichert.\n\n'
-            'Nur Trainingseinheiten mit mindestens 30 Minuten '
+            'Nur Trainingseinheiten mit mindestens $minimumMinutes Minuten '
             'Gesamtdauer zählen zur Punktewertung.\n\n'
             'Pro Monat ist höchstens ein Rangwechsel möglich. '
             'Vergangene Monate werden beim nächsten Öffnen '
@@ -69,20 +70,27 @@ class RankScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final accentColor = colors.primary;
+    final secondaryTextColor = colors.onSurfaceVariant;
+
+    // Im Lightmode wird Gold dunkler, damit der Text lesbar bleibt.
+    final maintenanceColor = isDark
+        ? const Color(0xFFFFC857)
+        : const Color(0xFF855600);
+
     final definition = levelLibrary[progress.level - 1];
     final promotionXp = definition.promotionXp;
-
-    // Jeder Rang hat ein eigenes Ringziel.
-    // Im höchsten Rang liegt der Klassenerhalt bei 80 % dieses Ziels.
     final targetXp = definition.targetXp;
 
-    final fraction = targetXp > 0
-        ? (monthlyXp / targetXp).clamp(0.0, 1.0).toDouble()
-        : 1.0;
+    final fraction = (monthlyXp / targetXp).clamp(0.0, 1.0).toDouble();
 
-    final maintenanceFraction = targetXp > 0
-        ? (definition.maintenanceXp / targetXp).clamp(0.0, 1.0).toDouble()
-        : 0.0;
+    final maintenanceFraction = (definition.maintenanceXp / targetXp)
+        .clamp(0.0, 1.0)
+        .toDouble();
 
     final maintenanceReached = monthlyXp >= definition.maintenanceXp;
 
@@ -93,8 +101,6 @@ class RankScreen extends StatelessWidget {
     final remainingDays = remainingSeconds > 0
         ? (remainingSeconds / Duration.secondsPerDay).ceil()
         : 0;
-
-    final accentColor = Theme.of(context).colorScheme.primary;
 
     final String status;
     final IconData statusIcon;
@@ -168,10 +174,9 @@ class RankScreen extends StatelessWidget {
         Text(
           'Rang ${definition.number} von ${levelLibrary.length}',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: secondaryTextColor),
         ),
         const SizedBox(height: 24),
-
         LayoutBuilder(
           builder: (context, constraints) {
             final size = math.min(constraints.maxWidth, 360.0);
@@ -190,11 +195,12 @@ class RankScreen extends StatelessWidget {
                       progress: fraction,
                       maintenanceFraction: maintenanceFraction,
                       color: accentColor,
-                      trackColor: Colors.white10,
-                      maintenanceColor: _maintenanceColor,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).scaffoldBackgroundColor,
+
+                      // Dunkler Ring auf hellem Hintergrund,
+                      // heller Ring auf dunklem Hintergrund.
+                      trackColor: colors.onSurface.withValues(alpha: 0.14),
+                      maintenanceColor: maintenanceColor,
+                      backgroundColor: theme.scaffoldBackgroundColor,
                     ),
                     child: Padding(
                       padding: EdgeInsets.all(size * 0.16),
@@ -204,38 +210,40 @@ class RankScreen extends StatelessWidget {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text(
+                              Text(
                                 'MONATSPUNKTE',
                                 style: TextStyle(
-                                  color: Colors.white70,
+                                  color: secondaryTextColor,
                                   letterSpacing: 1.5,
                                 ),
                               ),
                               const SizedBox(height: 10),
                               Text(
                                 '$monthlyXp',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 58,
                                   fontWeight: FontWeight.bold,
+                                  color: colors.onSurface,
                                 ),
                               ),
                               const SizedBox(height: 6),
-
-                              // Beide Ziele sind direkt im Ring ablesbar.
                               Text(
                                 'Klassenerhalt: '
                                 '${definition.maintenanceXp} XP',
-                                style: const TextStyle(
-                                  color: _maintenanceColor,
+                                style: TextStyle(
+                                  color: maintenanceColor,
                                   fontSize: 16,
                                 ),
                               ),
                               const SizedBox(height: 6),
                               Text(
                                 promotionXp == null
-                                    ? 'Höchster Rang'
+                                    ? 'Monatsziel: $targetXp XP'
                                     : 'Aufstieg: $promotionXp XP',
-                                style: const TextStyle(fontSize: 18),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: colors.onSurface,
+                                ),
                               ),
                               const SizedBox(height: 16),
                               Text(
@@ -243,9 +251,10 @@ class RankScreen extends StatelessWidget {
                                     ? 'Monatswechsel'
                                     : 'Noch $remainingDays '
                                           '${remainingDays == 1 ? 'Tag' : 'Tage'}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
+                                  color: colors.onSurface,
                                 ),
                               ),
                             ],
@@ -260,17 +269,15 @@ class RankScreen extends StatelessWidget {
           },
         ),
         const SizedBox(height: 20),
-
-        // Diese Erklärung erscheint auch bei Rang 1 mit 0 XP.
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.circle, size: 12, color: _maintenanceColor),
+            Icon(Icons.circle, size: 12, color: maintenanceColor),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
                 'Klassenerhalt bei ${definition.maintenanceXp} XP',
-                style: const TextStyle(color: _maintenanceColor),
+                style: TextStyle(color: maintenanceColor),
               ),
             ),
             const SizedBox(width: 8),
@@ -279,16 +286,16 @@ class RankScreen extends StatelessWidget {
                   ? Icons.check_circle_outline
                   : Icons.lock_outline,
               size: 18,
-              color: maintenanceReached ? accentColor : Colors.white54,
+              color: maintenanceReached ? accentColor : secondaryTextColor,
             ),
           ],
         ),
         if (definition.number == 1) ...[
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Im ersten Rang ist kein Abstieg möglich.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 12),
+            style: TextStyle(color: secondaryTextColor, fontSize: 12),
           ),
         ],
         const SizedBox(height: 16),
@@ -311,7 +318,7 @@ class RankScreen extends StatelessWidget {
                 Text(
                   definition.description,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70),
+                  style: TextStyle(color: secondaryTextColor),
                 ),
               ],
             ),
@@ -322,7 +329,7 @@ class RankScreen extends StatelessWidget {
           'Nächste Auswertung: '
           '${_formatDate(progress.periodEndsAt)} um 00:00 UTC',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: TextStyle(color: secondaryTextColor, fontSize: 12),
         ),
         const SizedBox(height: 28),
         const Text(
@@ -344,15 +351,16 @@ class RankScreen extends StatelessWidget {
               leading: CircleAvatar(
                 backgroundColor: level.number == progress.level
                     ? accentColor
-                    : Colors.white10,
+                    : colors.surfaceContainerHighest,
                 foregroundColor: level.number == progress.level
-                    ? Colors.black
-                    : Colors.white70,
+                    ? colors.onPrimary
+                    : colors.onSurfaceVariant,
                 child: Text('${level.number}'),
               ),
               title: Text(level.name),
               subtitle: Text(
-                'Halten: ${level.maintenanceXp} XP\n'
+                'Halten: ${level.maintenanceXp} XP '
+                '(${level.maintenancePercent} %)\n'
                 '${level.promotionXp == null ? 'Höchster Rang' : 'Aufstieg: ${level.promotionXp} XP'}',
               ),
               isThreeLine: true,
@@ -366,7 +374,7 @@ class RankScreen extends StatelessWidget {
   }
 }
 
-/// Zeichnet den Fortschritt und einen festen Punkt für den Klassenerhalt.
+/// Zeichnet Fortschrittsring und Klassenerhalt-Markierung.
 class _RankRingPainter extends CustomPainter {
   final double progress;
   final double maintenanceFraction;
@@ -408,14 +416,11 @@ class _RankRingPainter extends CustomPainter {
       );
     }
 
-    // Die Position ergibt sich aus Klassenerhalt / Ringziel.
-    // Bei 0 XP liegt der Punkt oben am Anfang des Rings.
     final angle = -math.pi / 2 + math.pi * 2 * maintenanceFraction;
 
     final markerPosition =
         center + Offset(math.cos(angle), math.sin(angle)) * radius;
 
-    // Dunkler Rand hebt die Markierung vom Fortschrittsring ab.
     canvas.drawCircle(markerPosition, 12, Paint()..color = backgroundColor);
 
     canvas.drawCircle(markerPosition, 8, Paint()..color = maintenanceColor);

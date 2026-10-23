@@ -9,14 +9,10 @@ class CreateTrainingScreen extends StatefulWidget {
   /// Beim Bearbeiten wird die vorhandene Vorlage übergeben.
   final TrainingPlan? initialTraining;
 
-  const CreateTrainingScreen({
-    super.key,
-    this.initialTraining,
-  });
+  const CreateTrainingScreen({super.key, this.initialTraining});
 
   @override
-  State<CreateTrainingScreen> createState() =>
-      _CreateTrainingScreenState();
+  State<CreateTrainingScreen> createState() => _CreateTrainingScreenState();
 }
 
 class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
@@ -45,18 +41,14 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
 
   /// Prüft anhand der Kennung, ob eine Übung ausgewählt ist.
   bool _isSelected(Exercise exercise) {
-    return _selectedExercises.any(
-      (item) => item.id == exercise.id,
-    );
+    return _selectedExercises.any((item) => item.id == exercise.id);
   }
 
   /// Fügt eine Übung hinzu oder entfernt sie aus der Auswahl.
   void _toggleExercise(Exercise exercise) {
     setState(() {
       if (_isSelected(exercise)) {
-        _selectedExercises.removeWhere(
-          (item) => item.id == exercise.id,
-        );
+        _selectedExercises.removeWhere((item) => item.id == exercise.id);
       } else {
         _selectedExercises.add(exercise);
       }
@@ -93,7 +85,8 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
 
     final training = TrainingPlan(
       // Beim Bearbeiten bleibt die Kennung samt Trainingshistorie erhalten.
-      id: widget.initialTraining?.id ??
+      id:
+          widget.initialTraining?.id ??
           DateTime.now().microsecondsSinceEpoch.toString(),
       name: name,
       exercises: _selectedExercises,
@@ -143,9 +136,7 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                   key: ValueKey(exercise.id),
                   leading: SizedBox(
                     width: 28,
-                    child: Center(
-                      child: Text('${index + 1}'),
-                    ),
+                    child: Center(child: Text('${index + 1}')),
                   ),
                   title: Text(
                     exercise.name,
@@ -186,11 +177,9 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
     final accentColor = Theme.of(context).colorScheme.primary;
 
     // Jede vorhandene Muskelgruppe einmal anzeigen und sortieren.
-    final muscleGroups = exerciseLibrary
-        .map((exercise) => exercise.muscleGroup)
-        .toSet()
-        .toList()
-      ..sort();
+    final muscleGroups =
+        exerciseLibrary.map((exercise) => exercise.muscleGroup).toSet().toList()
+          ..sort();
 
     // Der Filter verändert nur die Anzeige, nicht die Auswahl.
     final filteredExercises = exerciseLibrary.where((exercise) {
@@ -256,8 +245,7 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                       onSelected: (selected) {
                         setState(() {
                           // Erneutes Antippen hebt den Filter auf.
-                          _selectedMuscleGroup =
-                              selected ? muscleGroup : null;
+                          _selectedMuscleGroup = selected ? muscleGroup : null;
                         });
                       },
                     ),
@@ -310,10 +298,11 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                '${exercise.muscleGroup} · '
-                                '${exercise.equipment}',
-                                style: const TextStyle(
-                                  color: Colors.white70,
+                                '${exercise.muscleGroup} · ${exercise.equipment}',
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                               ),
                             ],

@@ -1,3 +1,4 @@
+import 'package:repstar/widgets/theme_mode_button.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -720,6 +721,8 @@ class _TrainingScreenState extends State<TrainingScreen>
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          const ThemeModeButton(),
+
           if (_selectedPage == 0)
             IconButton(
               tooltip: 'Training erstellen',
