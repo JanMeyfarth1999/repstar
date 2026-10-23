@@ -619,7 +619,9 @@ class _TrainingScreenState extends State<TrainingScreen>
                 const SizedBox(height: 8),
                 Text(
                   '${training.exercises.length} Übungen',
-                  style: const TextStyle(color: Colors.white70),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
