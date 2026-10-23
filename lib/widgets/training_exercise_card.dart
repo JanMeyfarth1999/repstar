@@ -103,7 +103,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
               style: TextStyle(
                 color: workoutSet.isCompleted
                     ? accentColor
-                    : Colors.white70,
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),

@@ -1,0 +1,19 @@
+{
+  "syntax": "pass",
+  "fixed_color_audit": "pass",
+  "contrast": [
+    {
+      "theme": "light",
+      "min_text_contrast": 5.88,
+      "button_contrast": 6.58,
+      "ring_contrast": 3.99
+    },
+    {
+      "theme": "dark",
+      "min_text_contrast": 9.53,
+      "button_contrast": 16.08,
+      "ring_contrast": 5.83
+    }
+  ],
+  "flutter_tests": "not run: Flutter SDK is not installed"
+}

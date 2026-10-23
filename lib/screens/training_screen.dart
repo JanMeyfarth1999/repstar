@@ -1,4 +1,3 @@
-import 'package:repstar/widgets/theme_mode_button.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -13,6 +12,7 @@ import 'package:repstar/screens/rank_screen.dart';
 import 'package:repstar/services/level_service.dart';
 import 'package:repstar/services/storage_service.dart';
 import 'package:repstar/services/training_reward_service.dart';
+import 'package:repstar/widgets/theme_mode_button.dart';
 
 /// Verwaltet Training, Rang und die gemeinsame lokale Speicherung.
 class TrainingScreen extends StatefulWidget {
@@ -524,10 +524,13 @@ class _TrainingScreenState extends State<TrainingScreen>
                             'ca. ${reward.estimatedActiveKcal!.round()} kcal',
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Grobes Modell für die Satz-Ausführung. '
                   'Pausen und Nachverbrauch sind nicht enthalten.',
-                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ] else
                 const Text('Die Auswertung konnte nicht berechnet werden.'),
@@ -553,24 +556,26 @@ class _TrainingScreenState extends State<TrainingScreen>
 
   Widget _buildTrainings() {
     if (_trainings.isEmpty) {
-      return const Center(
+      final colors = Theme.of(context).colorScheme;
+
+      return Center(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.fitness_center, size: 64, color: Color(0xFF76FF03)),
-              SizedBox(height: 24),
-              Text(
+              Icon(Icons.fitness_center, size: 64, color: colors.primary),
+              const SizedBox(height: 24),
+              const Text(
                 'Dein Training. Deine Bühne.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Text(
                 'Erstelle dein erstes Training über das + oben rechts.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(color: colors.onSurfaceVariant),
               ),
             ],
           ),
@@ -634,7 +639,9 @@ class _TrainingScreenState extends State<TrainingScreen>
                   Text(
                     'Letzte Trainingsdauer: '
                     '${lastSession.duration.inMinutes} Minuten',
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
                 if (reward != null) ...[

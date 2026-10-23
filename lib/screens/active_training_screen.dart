@@ -351,7 +351,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
 
     final color = minimumReached
         ? Theme.of(context).colorScheme.primary
-        : Colors.white70;
+        : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,

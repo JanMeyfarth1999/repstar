@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:repstar/data/level_library.dart';
 import 'package:repstar/models/level_progress.dart';
 import 'package:repstar/services/training_reward_service.dart';
+import 'package:repstar/theme/app_theme.dart';
 
 /// Zeigt Rang und Monatsfortschritt im hellen und dunklen Design.
 class RankScreen extends StatelessWidget {
@@ -72,15 +73,13 @@ class RankScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
 
     final accentColor = colors.primary;
     final secondaryTextColor = colors.onSurfaceVariant;
 
-    // Im Lightmode wird Gold dunkler, damit der Text lesbar bleibt.
-    final maintenanceColor = isDark
-        ? const Color(0xFFFFC857)
-        : const Color(0xFF855600);
+    // Sonderfarben kommen wie die Standardfarben aus dem aktiven Theme.
+    final rankColors = theme.extension<RepStarColors>()!;
+    final maintenanceColor = rankColors.maintenance;
 
     final definition = levelLibrary[progress.level - 1];
     final promotionXp = definition.promotionXp;
@@ -198,7 +197,7 @@ class RankScreen extends StatelessWidget {
 
                       // Dunkler Ring auf hellem Hintergrund,
                       // heller Ring auf dunklem Hintergrund.
-                      trackColor: colors.onSurface.withValues(alpha: 0.14),
+                      trackColor: rankColors.ringTrack,
                       maintenanceColor: maintenanceColor,
                       backgroundColor: theme.scaffoldBackgroundColor,
                     ),
