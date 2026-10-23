@@ -1,13 +1,15 @@
 import 'package:repstar/models/level_definition.dart';
 
-/// Ranggrenzen pro 30-Tage-Runde.
+/// Ranggrenzen pro Kalendermonat.
+/// Monatswechsel ist am ersten Tag des Monats um 00:00 Uhr UTC.
 /// Die XP-Werte sind erste Spielregeln und werden anhand der
 /// anschließenden Trainingsberechnung überprüft und abgestimmt.
 const List<LevelDefinition> levelLibrary = [
   LevelDefinition(
     number: 1,
     name: 'Sofakartoffel',
-    description: 'Die Couch kennt dich. Zeit, dass die Hanteln dich kennenlernen.',
+    description:
+        'Die Couch kennt dich. Zeit, dass die Hanteln dich kennenlernen.',
     maintenanceXp: 0,
     promotionXp: 80,
   ),

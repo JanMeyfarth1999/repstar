@@ -1,21 +1,21 @@
 import 'package:repstar/models/exercise_settings.dart';
+import 'package:repstar/models/training_reward.dart';
 import 'package:repstar/models/workouts_set.dart';
 
-/// Eine absolvierte Trainingseinheit mit Zeiten und Satzwerten.
+/// Eine absolvierte Trainingseinheit mit Zeiten, Satzwerten und Auswertung.
 class TrainingSession {
   final String trainingPlanId;
   final DateTime startedAt;
   final DateTime endedAt;
 
-  /// Körpergewicht, das für diese Einheit verwendet wurde.
-  /// Bei älteren Einheiten oder fehlender Eingabe ist es unbekannt.
+  /// Körpergewicht, das beim Start dieser Einheit hinterlegt war.
   final double? bodyWeightKg;
 
-  /// Ordnet jeder Übungskennung die gespeicherten Sätze zu.
   final Map<String, List<WorkoutSet>> setsByExercise;
-
-  /// Optionale Geräteeinstellungen, zugeordnet über die Übungskennung.
   final Map<String, ExerciseSettings> settingsByExercise;
+
+  /// Einmal berechnetes Ergebnis. Bei älteren Einheiten nicht vorhanden.
+  final TrainingReward? reward;
 
   TrainingSession({
     required this.trainingPlanId,
@@ -24,6 +24,7 @@ class TrainingSession {
     this.bodyWeightKg,
     required Map<String, List<WorkoutSet>> setsByExercise,
     Map<String, ExerciseSettings> settingsByExercise = const {},
+    this.reward,
   }) : setsByExercise = Map<String, List<WorkoutSet>>.unmodifiable(
          setsByExercise.map(
            (exerciseId, sets) => MapEntry(
@@ -40,23 +41,33 @@ class TrainingSession {
            ),
          ),
        ),
-       settingsByExercise =
-           Map<String, ExerciseSettings>.unmodifiable(
-             settingsByExercise.map(
-               (exerciseId, settings) => MapEntry(
-                 exerciseId,
-                 ExerciseSettings(
-                   seatHeight: settings.seatHeight,
-                   otherAdjustments: settings.otherAdjustments,
-                 ),
-               ),
+       settingsByExercise = Map<String, ExerciseSettings>.unmodifiable(
+         settingsByExercise.map(
+           (exerciseId, settings) => MapEntry(
+             exerciseId,
+             ExerciseSettings(
+               seatHeight: settings.seatHeight,
+               otherAdjustments: settings.otherAdjustments,
              ),
-           );
+           ),
+         ),
+       );
 
-  /// Berechnet die gesamte Trainingsdauer.
   Duration get duration => endedAt.difference(startedAt);
 
-  /// Wandelt die abgeschlossene Einheit in speicherbare Daten um.
+  /// Erstellt eine Kopie mit der berechneten Auswertung.
+  TrainingSession withReward(TrainingReward calculatedReward) {
+    return TrainingSession(
+      trainingPlanId: trainingPlanId,
+      startedAt: startedAt,
+      endedAt: endedAt,
+      bodyWeightKg: bodyWeightKg,
+      setsByExercise: setsByExercise,
+      settingsByExercise: settingsByExercise,
+      reward: calculatedReward,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'trainingPlanId': trainingPlanId,
@@ -70,17 +81,14 @@ class TrainingSession {
         ),
       ),
       'settingsByExercise': settingsByExercise.map(
-        (exerciseId, settings) => MapEntry(
-          exerciseId,
-          settings.toJson(),
-        ),
+        (exerciseId, settings) => MapEntry(exerciseId, settings.toJson()),
       ),
+      'reward': reward?.toJson(),
     };
   }
 
-  /// Liest das aktuelle Format und die früher verwendeten Feldnamen.
   factory TrainingSession.fromJson(Map<String, dynamic> json) {
-    // Unterstützt auch die früheren Schreibweisen.
+    // Unterstützt auch die früher verwendeten Schreibweisen.
     final exerciseData =
         (json['setsByExercise'] ??
                 json['setByExercise'] ??
@@ -90,27 +98,26 @@ class TrainingSession {
     final planId =
         (json['trainingPlanId'] ?? json['trainingsPlanId']) as String;
 
-    final endTime =
-        (json['endedAt'] ?? json['endeAt']) as String;
+    final endTime = (json['endedAt'] ?? json['endeAt']) as String;
 
-    // Alte Einheiten enthalten noch keine Geräteeinstellungen.
     final settingsData =
         json['settingsByExercise'] as Map<String, dynamic>? ?? {};
+
+    final rewardData = json['reward'] as Map<String, dynamic>?;
 
     return TrainingSession(
       trainingPlanId: planId,
       startedAt: DateTime.parse(json['startedAt'] as String),
       endedAt: DateTime.parse(endTime),
-
-      // Für alte Einheiten wird kein Körpergewicht nachträglich erfunden.
       bodyWeightKg: (json['bodyWeightKg'] as num?)?.toDouble(),
+
+      // Alte Einheiten erhalten keine nachträglich erfundene Auswertung.
+      reward: rewardData == null ? null : TrainingReward.fromJson(rewardData),
 
       settingsByExercise: settingsData.map(
         (exerciseId, value) => MapEntry(
           exerciseId,
-          ExerciseSettings.fromJson(
-            value as Map<String, dynamic>,
-          ),
+          ExerciseSettings.fromJson(value as Map<String, dynamic>),
         ),
       ),
       setsByExercise: exerciseData.map((exerciseId, value) {
@@ -119,9 +126,7 @@ class TrainingSession {
         return MapEntry(
           exerciseId,
           setData.map((item) {
-            return WorkoutSet.fromJson(
-              item as Map<String, dynamic>,
-            );
+            return WorkoutSet.fromJson(item as Map<String, dynamic>);
           }).toList(),
         );
       }),

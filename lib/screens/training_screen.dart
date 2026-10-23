@@ -1,12 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:repstar/data/level_library.dart';
+import 'package:repstar/models/level_progress.dart';
 import 'package:repstar/models/training_data.dart';
 import 'package:repstar/models/training_plan.dart';
 import 'package:repstar/models/training_session.dart';
 import 'package:repstar/screens/active_training_screen.dart';
 import 'package:repstar/screens/create_training_screen.dart';
+import 'package:repstar/screens/rank_screen.dart';
+import 'package:repstar/services/level_service.dart';
 import 'package:repstar/services/storage_service.dart';
+import 'package:repstar/services/training_reward_service.dart';
 
-/// Zeigt Trainingsvorlagen und verwaltet ihre lokale Speicherung.
+/// Verwaltet Training, Rang und die gemeinsame lokale Speicherung.
 class TrainingScreen extends StatefulWidget {
   const TrainingScreen({super.key});
 
@@ -14,26 +21,66 @@ class TrainingScreen extends StatefulWidget {
   State<TrainingScreen> createState() => _TrainingScreenState();
 }
 
-class _TrainingScreenState extends State<TrainingScreen> {
+class _TrainingScreenState extends State<TrainingScreen>
+    with WidgetsBindingObserver {
   final StorageService _storageService = StorageService();
+
+  final TrainingRewardService _rewardService = const TrainingRewardService();
+
+  final LevelService _levelService = LevelService(levels: levelLibrary);
 
   final List<TrainingPlan> _trainings = [];
   final Map<String, List<TrainingSession>> _sessionsByTraining = {};
 
-  /// Aktuell hinterlegtes Körpergewicht.
+  LevelProgress _levelProgress = LevelProgress.initial();
+  DateTime _now = DateTime.now();
+
   double? _bodyWeightKg;
+  int _selectedPage = 0;
 
   bool _isLoading = true;
   bool _isSaving = false;
   bool _hasUnsavedChanges = false;
   String? _loadError;
 
+  Timer? _calendarTimer;
+
+  /// Eine laufende Speicherung wird von weiteren Aufrufen mitverwendet.
+  Future<bool>? _saveFuture;
+
+  /// Erkennt Änderungen, die während eines Schreibvorgangs entstehen.
+  int _revision = 0;
+
+  /// Gemeinsamer Zugriff auf sämtliche gespeicherten Einheiten.
+  Iterable<TrainingSession> get _allSessions =>
+      _sessionsByTraining.values.expand((sessions) => sessions);
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
-    // Beim Öffnen des Bildschirms vorhandene Daten laden.
-    _loadData();
+    unawaited(_loadData());
+
+    // Prüft den Monatswechsel auch, während die App geöffnet bleibt.
+    _calendarTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => unawaited(_refreshRank()),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Nach Rückkehr aus dem Hintergrund vergangene Monate auswerten.
+      unawaited(_refreshRank());
+    }
+  }
+
+  /// Innerhalb von setState aufrufen, wenn Speicherdaten geändert werden.
+  void _markChanged() {
+    _revision += 1;
+    _hasUnsavedChanges = true;
   }
 
   Future<void> _loadData() async {
@@ -44,6 +91,13 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
     try {
       final data = await _storageService.load();
+      final now = DateTime.now();
+
+      final progress = _levelService.evaluate(
+        progress: data.levelProgress,
+        sessions: data.sessionsByTraining.values.expand((sessions) => sessions),
+        now: now,
+      );
 
       if (!mounted) {
         return;
@@ -59,7 +113,10 @@ class _TrainingScreenState extends State<TrainingScreen> {
           ..addAll(data.sessionsByTraining);
 
         _bodyWeightKg = data.bodyWeightKg;
+        _levelProgress = progress;
+        _now = now;
         _isLoading = false;
+        _markChanged();
       });
     } catch (error, stackTrace) {
       if (!mounted) {
@@ -74,12 +131,67 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
       debugPrint('Fehler beim Laden: $error');
       debugPrintStack(stackTrace: stackTrace);
+      return;
+    }
+
+    // Sichert auch die Umstellung älterer Dateien auf das neue Format.
+    await _saveData();
+  }
+
+  /// Aktualisiert Uhrzeit und gegebenenfalls den gespeicherten Rang.
+  Future<void> _refreshRank() async {
+    if (!mounted || _isLoading || _loadError != null) {
+      return;
+    }
+
+    final now = DateTime.now();
+
+    final updated = _levelService.evaluate(
+      progress: _levelProgress,
+      sessions: _allSessions,
+      now: now,
+    );
+
+    final changed =
+        updated.level != _levelProgress.level ||
+        !updated.periodStartedAt.isAtSameMomentAs(
+          _levelProgress.periodStartedAt,
+        );
+
+    setState(() {
+      _now = now;
+
+      if (changed) {
+        _levelProgress = updated;
+        _markChanged();
+      }
+    });
+
+    if (changed) {
+      await _saveData();
     }
   }
 
-  /// Gemeinsame Speichermethode für Gewicht, Vorlagen und Einheiten.
+  /// Verhindert gleichzeitig laufende Schreibvorgänge.
   Future<bool> _saveData() async {
-    if (_isSaving) {
+    final runningSave = _saveFuture;
+
+    if (runningSave != null) {
+      return runningSave;
+    }
+
+    final save = _performSave();
+    _saveFuture = save;
+
+    try {
+      return await save;
+    } finally {
+      _saveFuture = null;
+    }
+  }
+
+  Future<bool> _performSave() async {
+    if (!mounted || _isLoading || _loadError != null) {
       return false;
     }
 
@@ -88,17 +200,30 @@ class _TrainingScreenState extends State<TrainingScreen> {
     });
 
     try {
-      await _storageService.save(
-        TrainingData(
-          trainings: _trainings,
-          sessionsByTraining: _sessionsByTraining,
-          bodyWeightKg: _bodyWeightKg,
-        ),
-      );
+      int savedRevision;
 
-      if (!mounted) {
-        return false;
-      }
+      do {
+        savedRevision = _revision;
+
+        // Eigene Listen bilden einen festen Stand für diesen Schreibvorgang.
+        final snapshot = TrainingData(
+          trainings: List<TrainingPlan>.of(_trainings),
+          sessionsByTraining: _sessionsByTraining.map(
+            (id, sessions) => MapEntry(id, List<TrainingSession>.of(sessions)),
+          ),
+          bodyWeightKg: _bodyWeightKg,
+          levelProgress: _levelProgress,
+        );
+
+        await _storageService.save(snapshot);
+
+        if (!mounted) {
+          return false;
+        }
+
+        // Falls während des Speicherns etwas geändert wurde,
+        // den aktuellen Stand anschließend ebenfalls sichern.
+      } while (savedRevision != _revision);
 
       setState(() {
         _isSaving = false;
@@ -106,24 +231,22 @@ class _TrainingScreenState extends State<TrainingScreen> {
       });
 
       return true;
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) {
         return false;
       }
 
-      // Die Daten bleiben im Speicher und können erneut gesichert werden.
       setState(() {
         _isSaving = false;
         _hasUnsavedChanges = true;
       });
 
       debugPrint('Fehler beim Speichern: $error');
+      debugPrintStack(stackTrace: stackTrace);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Speichern fehlgeschlagen. Bitte erneut versuchen.',
-          ),
+          content: Text('Speichern fehlgeschlagen. Bitte erneut versuchen.'),
         ),
       );
 
@@ -131,7 +254,6 @@ class _TrainingScreenState extends State<TrainingScreen> {
     }
   }
 
-  /// Öffnet die Gewichtseingabe und speichert einen gültigen Wert.
   Future<void> _editBodyWeight() async {
     if (_isLoading || _isSaving || _loadError != null) {
       return;
@@ -142,105 +264,94 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
     final weight = await showDialog<double>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            // Button und Tastatur verwenden dieselbe Eingabeprüfung.
-            void submitWeight() {
-              final parsedWeight = double.tryParse(
-                input.trim().replaceAll(',', '.'),
-              );
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          // Tastatur und Speichern-Button verwenden dieselbe Prüfung.
+          void submitWeight() {
+            final parsedWeight = double.tryParse(
+              input.trim().replaceAll(',', '.'),
+            );
 
-              if (parsedWeight == null ||
-                  !parsedWeight.isFinite ||
-                  parsedWeight <= 0) {
-                setDialogState(() {
-                  errorText = 'Bitte ein gültiges Gewicht über 0 eingeben.';
-                });
-                return;
-              }
-
-              Navigator.of(dialogContext).pop(parsedWeight);
+            if (parsedWeight == null ||
+                !parsedWeight.isFinite ||
+                parsedWeight <= 0) {
+              setDialogState(() {
+                errorText = 'Bitte ein gültiges Gewicht über 0 eingeben.';
+              });
+              return;
             }
 
-            return AlertDialog(
-              title: const Text('Körpergewicht'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Dein Gewicht wird später für die Schätzung '
-                      'deines Kalorienverbrauchs verwendet.',
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      initialValue: input,
-                      autofocus: true,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                      textInputAction: TextInputAction.done,
-                      decoration: InputDecoration(
-                        labelText: 'Körpergewicht',
-                        hintText: 'Zum Beispiel 85,5',
-                        suffixText: 'kg',
-                        border: const OutlineInputBorder(),
-                        errorText: errorText,
-                      ),
-                      onChanged: (value) {
-                        input = value;
+            Navigator.of(dialogContext).pop(parsedWeight);
+          }
 
-                        if (errorText != null) {
-                          setDialogState(() {
-                            errorText = null;
-                          });
-                        }
-                      },
-                      onFieldSubmitted: (_) => submitWeight(),
+          return AlertDialog(
+            title: const Text('Körpergewicht'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Dein Gewicht wird für die grobe '
+                    'Kalorienschätzung verwendet.',
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    initialValue: input,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
                     ),
-                  ],
-                ),
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
+                      labelText: 'Körpergewicht',
+                      hintText: 'Zum Beispiel 85,5',
+                      suffixText: 'kg',
+                      border: const OutlineInputBorder(),
+                      errorText: errorText,
+                    ),
+                    onChanged: (value) {
+                      input = value;
+
+                      if (errorText != null) {
+                        setDialogState(() {
+                          errorText = null;
+                        });
+                      }
+                    },
+                    onFieldSubmitted: (_) => submitWeight(),
+                  ),
+                ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                  },
-                  child: const Text('Abbrechen'),
-                ),
-                FilledButton(
-                  onPressed: submitWeight,
-                  child: const Text('Speichern'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Abbrechen'),
+              ),
+              FilledButton(
+                onPressed: submitWeight,
+                child: const Text('Speichern'),
+              ),
+            ],
+          );
+        },
+      ),
     );
 
-    // Abbrechen übernimmt keine Änderung.
     if (!mounted || weight == null) {
       return;
     }
 
     setState(() {
       _bodyWeightKg = weight;
-      _hasUnsavedChanges = true;
+      _markChanged();
     });
 
     await _saveData();
   }
 
-  /// Zeigt das aktuelle Gewicht und öffnet beim Antippen die Eingabe.
   Widget _buildBodyWeightCard() {
     final weight = _bodyWeightKg;
-    final weightText = weight == null
-        ? 'Noch nicht angegeben'
-        : '${weight.toString().replaceAll('.', ',')} kg';
 
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -250,7 +361,11 @@ class _TrainingScreenState extends State<TrainingScreen> {
           color: Theme.of(context).colorScheme.primary,
         ),
         title: const Text('Körpergewicht'),
-        subtitle: Text(weightText),
+        subtitle: Text(
+          weight == null
+              ? 'Noch nicht angegeben'
+              : '${weight.toString().replaceAll('.', ',')} kg',
+        ),
         trailing: const Icon(Icons.edit_outlined),
         onTap: _isSaving ? null : _editBodyWeight,
       ),
@@ -270,50 +385,43 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
     setState(() {
       _trainings.add(training);
-      _hasUnsavedChanges = true;
+      _markChanged();
     });
 
     await _saveData();
   }
 
   Future<void> _editTraining(TrainingPlan training) async {
-    final updatedTraining =
-        await Navigator.of(context).push<TrainingPlan>(
+    final updated = await Navigator.of(context).push<TrainingPlan>(
       MaterialPageRoute<TrainingPlan>(
-        builder: (context) => CreateTrainingScreen(
-          initialTraining: training,
-        ),
+        builder: (context) => CreateTrainingScreen(initialTraining: training),
       ),
     );
 
-    // Zurück ohne Speichern lässt die ursprüngliche Vorlage unverändert.
-    if (!mounted || updatedTraining == null) {
+    if (!mounted || updated == null) {
       return;
     }
 
-    final index = _trainings.indexWhere(
-      (item) => item.id == training.id,
-    );
+    final index = _trainings.indexWhere((item) => item.id == training.id);
 
     if (index == -1) {
       return;
     }
 
     setState(() {
-      _trainings[index] = updatedTraining;
-      _hasUnsavedChanges = true;
+      _trainings[index] = updated;
+      _markChanged();
     });
 
     await _saveData();
   }
 
   Future<void> _startTraining(TrainingPlan training) async {
-    // Das beim Start hinterlegte Gewicht für diese Einheit merken.
     final bodyWeightAtStart = _bodyWeightKg;
-
     final history = _sessionsByTraining[training.id];
-    final previousSession =
-        history == null || history.isEmpty ? null : history.last;
+    final previousSession = history == null || history.isEmpty
+        ? null
+        : history.last;
 
     final session = await Navigator.of(context).push<TrainingSession>(
       MaterialPageRoute<TrainingSession>(
@@ -328,8 +436,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
       return;
     }
 
-    // Die zurückgegebene Einheit um das beim Start bekannte Gewicht ergänzen.
-    final completedSession = TrainingSession(
+    var completedSession = TrainingSession(
       trainingPlanId: session.trainingPlanId,
       startedAt: session.startedAt,
       endedAt: session.endedAt,
@@ -338,59 +445,112 @@ class _TrainingScreenState extends State<TrainingScreen> {
       settingsByExercise: session.settingsByExercise,
     );
 
-    setState(() {
-      final sessions = _sessionsByTraining.putIfAbsent(
-        training.id,
-        () => [],
+    try {
+      final reward = _rewardService.calculate(
+        training: training,
+        session: completedSession,
       );
 
-      sessions.add(completedSession);
-      _hasUnsavedChanges = true;
+      completedSession = completedSession.withReward(reward);
+    } catch (error, stackTrace) {
+      // Die absolvierte Einheit auch ohne Auswertung erhalten.
+      debugPrint('Trainingsauswertung fehlgeschlagen: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+
+    setState(() {
+      _sessionsByTraining
+          .putIfAbsent(training.id, () => [])
+          .add(completedSession);
+
+      _now = DateTime.now();
+
+      // Berücksichtigt auch ein Training über einen Monatswechsel hinweg.
+      _levelProgress = _levelService.evaluate(
+        progress: _levelProgress,
+        sessions: _allSessions,
+        now: _now,
+      );
+
+      _markChanged();
     });
 
     final saved = await _saveData();
 
-    if (!mounted || !saved) {
-      return;
+    if (mounted) {
+      await _showTrainingSummary(completedSession, saved: saved);
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Trainingseinheit gespeichert.'),
-      ),
-    );
   }
 
-  /// Zeigt je nach Ladezustand den passenden Inhalt.
-  Widget _buildContent() {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
+  Future<void> _showTrainingSummary(
+    TrainingSession session, {
+    required bool saved,
+  }) async {
+    final reward = session.reward;
+    final totalSeconds = session.duration.inSeconds;
+    final minutes = totalSeconds ~/ 60;
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
 
-    if (_loadError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Training abgeschlossen'),
+        content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _loadError!,
-                textAlign: TextAlign.center,
-              ),
+              Text('Trainingsdauer: $minutes:$seconds min'),
               const SizedBox(height: 16),
-              FilledButton(
-                onPressed: _loadData,
-                child: const Text('Erneut laden'),
+              if (reward != null) ...[
+                Text(
+                  '+${reward.earnedXp} XP',
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text('${reward.completedSets} Sätze abgeschlossen'),
+                const SizedBox(height: 6),
+                Text('${reward.completedRepetitions} Wiederholungen'),
+                const SizedBox(height: 16),
+                Text(
+                  reward.estimatedActiveKcal == null
+                      ? 'Kalorienschätzung: Körpergewicht fehlt.'
+                      : 'Geschätzte aktive Kalorien: '
+                            'ca. ${reward.estimatedActiveKcal!.round()} kcal',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Grobes Modell für die Satz-Ausführung. '
+                  'Pausen und Nachverbrauch sind nicht enthalten.',
+                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                ),
+              ] else
+                const Text('Die Auswertung konnte nicht berechnet werden.'),
+              const SizedBox(height: 16),
+              Text(
+                saved
+                    ? 'Auf dem Gerät gespeichert.'
+                    : 'Noch nicht gespeichert. Schließe diese Ansicht '
+                          'und tippe auf „Erneut speichern“.',
               ),
             ],
           ),
         ),
-      );
-    }
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Weiter'),
+          ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildTrainings() {
     if (_trainings.isEmpty) {
       return const Center(
         child: SingleChildScrollView(
@@ -398,19 +558,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.fitness_center,
-                size: 64,
-                color: Color(0xFF76FF03),
-              ),
+              Icon(Icons.fitness_center, size: 64, color: Color(0xFF76FF03)),
               SizedBox(height: 24),
               Text(
                 'Dein Training. Deine Bühne.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 12),
               Text(
@@ -430,8 +583,10 @@ class _TrainingScreenState extends State<TrainingScreen> {
       itemBuilder: (context, index) {
         final training = _trainings[index];
         final history = _sessionsByTraining[training.id];
-        final lastSession =
-            history == null || history.isEmpty ? null : history.last;
+        final lastSession = history == null || history.isEmpty
+            ? null
+            : history.last;
+        final reward = lastSession?.reward;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -479,11 +634,18 @@ class _TrainingScreenState extends State<TrainingScreen> {
                     style: const TextStyle(color: Colors.white70),
                   ),
                 ],
+                if (reward != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Letzte Einheit: +${reward.earnedXp} XP',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: _isSaving
-                      ? null
-                      : () => _startTraining(training),
+                  onPressed: _isSaving ? null : () => _startTraining(training),
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Training starten'),
                 ),
@@ -495,34 +657,83 @@ class _TrainingScreenState extends State<TrainingScreen> {
     );
   }
 
+  Widget _buildContent() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_loadError!, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _loadData,
+                child: const Text('Erneut laden'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Beide Seiten greifen auf denselben Datenstand zu.
+    return IndexedStack(
+      index: _selectedPage,
+      children: [
+        Column(
+          children: [
+            _buildBodyWeightCard(),
+            Expanded(child: _buildTrainings()),
+          ],
+        ),
+        RankScreen(
+          progress: _levelProgress,
+          monthlyXp: _levelService.monthlyXp(
+            sessions: _allSessions,
+            month: _levelProgress.periodStartedAt,
+            now: _now,
+          ),
+          now: _now,
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _calendarTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Training',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          _selectedPage == 0 ? 'Training' : 'Dein Rang',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            tooltip: 'Training erstellen',
-            icon: const Icon(Icons.add),
-            color: Theme.of(context).colorScheme.primary,
-            onPressed: _isLoading || _isSaving || _loadError != null
-                ? null
-                : _createTraining,
-          ),
+          if (_selectedPage == 0)
+            IconButton(
+              tooltip: 'Training erstellen',
+              icon: const Icon(Icons.add),
+              color: Theme.of(context).colorScheme.primary,
+              onPressed: _isLoading || _isSaving || _loadError != null
+                  ? null
+                  : _createTraining,
+            ),
         ],
       ),
       body: Column(
         children: [
           if (_isSaving) const LinearProgressIndicator(),
-
-          // Gewicht erst nach erfolgreichem Laden bearbeiten lassen.
-          if (!_isLoading && _loadError == null)
-            _buildBodyWeightCard(),
-
-          // Bleibt sichtbar, solange Änderungen nicht gesichert sind.
           if (_hasUnsavedChanges && !_isSaving)
             Padding(
               padding: const EdgeInsets.all(16),
@@ -541,9 +752,28 @@ class _TrainingScreenState extends State<TrainingScreen> {
                 ],
               ),
             ),
+          Expanded(child: _buildContent()),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedPage,
+        onDestinationSelected: (index) {
+          setState(() {
+            _selectedPage = index;
+          });
 
-          Expanded(
-            child: _buildContent(),
+          unawaited(_refreshRank());
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.fitness_center_outlined),
+            selectedIcon: Icon(Icons.fitness_center),
+            label: 'Training',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.emoji_events_outlined),
+            selectedIcon: Icon(Icons.emoji_events),
+            label: 'Dein Rang',
           ),
         ],
       ),

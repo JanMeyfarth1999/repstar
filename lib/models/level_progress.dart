@@ -5,20 +5,13 @@ class LevelProgress {
   /// Monatsbeginn in UTC, beispielsweise 2026-11-01 um 00:00 Uhr.
   final DateTime periodStartedAt;
 
-  const LevelProgress({
-    required this.level,
-    required this.periodStartedAt,
-  });
+  const LevelProgress({required this.level, required this.periodStartedAt});
 
   /// Liefert den Beginn des Kalendermonats eines Zeitpunkts.
   static DateTime monthStart(DateTime date) {
     final utcDate = date.toUtc();
 
-    return DateTime.utc(
-      utcDate.year,
-      utcDate.month,
-      1,
-    );
+    return DateTime.utc(utcDate.year, utcDate.month, 1);
   }
 
   /// Die Runde endet am ersten Tag des nächsten Monats um 00:00 Uhr UTC.
@@ -26,11 +19,7 @@ class LevelProgress {
     final start = periodStartedAt.toUtc();
 
     // DateTime behandelt Monat 13 automatisch als Januar des Folgejahres.
-    return DateTime.utc(
-      start.year,
-      start.month + 1,
-      1,
-    );
+    return DateTime.utc(start.year, start.month + 1, 1);
   }
 
   /// Neue Nutzer beginnen mit Rang 1 im aktuellen Kalendermonat.

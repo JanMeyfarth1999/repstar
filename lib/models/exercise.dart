@@ -1,4 +1,4 @@
-/// Beschreibt eine Übung aus der Übungsbibliothek
+/// Beschreibt eine Übung aus der Übungsbibliothek.
 class Exercise {
   final String id;
   final String name;
@@ -6,16 +6,22 @@ class Exercise {
   final String muscleGroup;
   final String equipment;
 
-  /// Erstellt eine Übung mit allen benötigten Angaben.
+  /// Modellwert für die Belastung, keine individuelle Messung.
+  final double estimatedMet;
+
+  /// Angenommene Ausführungszeit je Wiederholung.
+  final double secondsPerRepetition;
+
   const Exercise({
     required this.id,
     required this.name,
     required this.imagePath,
     required this.muscleGroup,
     required this.equipment,
+    this.estimatedMet = 3.5,
+    this.secondsPerRepetition = 3,
   });
 
-  /// Wandelt die Übungsdaten in eine speicherbare Map um.
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -23,21 +29,27 @@ class Exercise {
       'imagePath': imagePath,
       'muscleGroup': muscleGroup,
       'equipment': equipment,
+      'estimatedMet': estimatedMet,
+      'secondsPerRepetition': secondsPerRepetition,
     };
   }
 
-  /// Stellt eine Übung aus gespeicherten Daten wieder her.
-factory Exercise.fromJson(Map<String, dynamic> json) {
-  return Exercise(
-    id: _readText(json, 'id'),
-    name: _readText(json, 'name'),
-    imagePath: _readText(json, 'imagePath'),
-    muscleGroup: _readText(json, 'muscleGroup'),
-    equipment: _readText(json, 'equipment'),
-  );
-}
+  factory Exercise.fromJson(Map<String, dynamic> json) {
+    return Exercise(
+      id: _readText(json, 'id'),
+      name: _readText(json, 'name'),
+      imagePath: _readText(json, 'imagePath'),
+      muscleGroup: _readText(json, 'muscleGroup'),
+      equipment: _readText(json, 'equipment'),
 
-  /// Unterstützt auch die zuvor vertauschten Schlüssel und Werte.
+      // Ältere gespeicherte Übungen verwenden die Standardannahmen.
+      estimatedMet: (json['estimatedMet'] as num?)?.toDouble() ?? 3.5,
+      secondsPerRepetition:
+          (json['secondsPerRepetition'] as num?)?.toDouble() ?? 3,
+    );
+  }
+
+  /// Unterstützt auch die früher vertauschten Schlüssel und Werte.
   static String _readText(Map<String, dynamic> json, String fieldName) {
     final value = json[fieldName];
 
@@ -45,7 +57,6 @@ factory Exercise.fromJson(Map<String, dynamic> json) {
       return value;
     }
 
-    // Bei den alten Daten steckt der tatsächliche Wert im Schlüssel.
     final matches = json.entries
         .where((entry) => entry.value == fieldName)
         .toList();
