@@ -1,13 +1,12 @@
 import 'package:repstar/models/level_definition.dart';
 import 'package:repstar/models/level_progress.dart';
 import 'package:repstar/models/training_session.dart';
+import 'package:repstar/services/training_reward_service.dart';
 
 /// Wertet monatliche Trainingspunkte und Rangänderungen aus.
 class LevelService {
   final List<LevelDefinition> _levels;
 
-  /// Die Rangdefinitionen werden zentral übergeben.
-  /// Dadurch verwenden Berechnung und Oberfläche dieselben Anforderungen.
   LevelService({required List<LevelDefinition> levels})
     : _levels = List<LevelDefinition>.unmodifiable(levels) {
     if (_levels.length != 10) {
@@ -35,7 +34,6 @@ class LevelService {
     }
   }
 
-  /// Liefert die Anforderungen eines bestimmten Rangs.
   LevelDefinition definitionFor(int level) {
     if (level < 1 || level > _levels.length) {
       throw ArgumentError.value(level, 'level', 'Ungültiger Rang.');
@@ -44,10 +42,7 @@ class LevelService {
     return _levels[level - 1];
   }
 
-  /// Summiert gespeicherte XP innerhalb des angegebenen Kalendermonats.
-  ///
-  /// Der Abschlusszeitpunkt bestimmt, zu welchem Monat eine Einheit gehört.
-  /// Einheiten ohne Auswertung liefern keine XP.
+  /// Summiert die gültigen Punkte des angegebenen Kalendermonats.
   int monthlyXp({
     required Iterable<TrainingSession> sessions,
     required DateTime month,
@@ -62,10 +57,14 @@ class LevelService {
     for (final session in sessions) {
       final finishedAt = session.endedAt.toUtc();
 
-      // Monatsbeginn gehört dazu, der nächste Monatsbeginn nicht mehr.
       if (finishedAt.isBefore(start) ||
           !finishedAt.isBefore(end) ||
           finishedAt.isAfter(currentTime)) {
+        continue;
+      }
+
+      // Gilt auch für alte Einheiten mit früher bereits vergebenen XP.
+      if (!TrainingRewardService.meetsMinimumXpDuration(session)) {
         continue;
       }
 
@@ -83,10 +82,7 @@ class LevelService {
     return total;
   }
 
-  /// Wertet alle seit der letzten Prüfung abgeschlossenen Monate aus.
-  ///
-  /// Innerhalb eines Monats bleibt der Rang unverändert.
-  /// Pro abgeschlossenem Monat ist höchstens ein Rangwechsel möglich.
+  /// Wertet alle bisher noch nicht abgeschlossenen Monatsauswertungen aus.
   LevelProgress evaluate({
     required LevelProgress progress,
     required Iterable<TrainingSession> sessions,
@@ -98,7 +94,6 @@ class LevelService {
     var periodStart = LevelProgress.monthStart(progress.periodStartedAt);
     var level = progress.level;
 
-    // Prüft auch den gespeicherten Rang auf Gültigkeit.
     definitionFor(level);
 
     // Bei zurückgestellter Geräteuhr keine Monate rückwärts auswerten.
@@ -106,7 +101,6 @@ class LevelService {
       return progress;
     }
 
-    // Dieselben Einheiten für mehrere Monatsauswertungen verwenden.
     final history = sessions.toList(growable: false);
 
     while (periodStart.isBefore(currentMonth)) {
@@ -126,7 +120,6 @@ class LevelService {
         level -= 1;
       }
 
-      // Automatischer Jahreswechsel bei Dezember.
       periodStart = DateTime.utc(periodStart.year, periodStart.month + 1, 1);
     }
 

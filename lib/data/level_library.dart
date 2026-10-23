@@ -1,79 +1,79 @@
 import 'package:repstar/models/level_definition.dart';
 
-/// Ranggrenzen pro Kalendermonat.
+/// Ranganforderungen pro Kalendermonat.
 /// Monatswechsel ist am ersten Tag des Monats um 00:00 Uhr UTC.
-/// Die XP-Werte sind erste Spielregeln und werden anhand der
-/// anschließenden Trainingsberechnung überprüft und abgestimmt.
+///
+/// Der benötigte Anteil für den Klassenerhalt steigt von 50 auf 80 Prozent.
 const List<LevelDefinition> levelLibrary = [
   LevelDefinition(
     number: 1,
     name: 'Sofakartoffel',
     description:
         'Die Couch kennt dich. Zeit, dass die Hanteln dich kennenlernen.',
-    maintenanceXp: 0,
-    promotionXp: 80,
+    targetXp: 80,
+    maintenancePercent: 50,
   ),
   LevelDefinition(
     number: 2,
     name: 'Ausreden-Azubi',
     description: 'Weniger „morgen“, mehr machen.',
-    maintenanceXp: 80,
-    promotionXp: 160,
+    targetXp: 160,
+    maintenancePercent: 53,
   ),
   LevelDefinition(
     number: 3,
     name: 'Gelegenheits-Pumper',
     description: 'Du tauchst auf. Jetzt wird daraus eine Gewohnheit.',
-    maintenanceXp: 120,
-    promotionXp: 240,
+    targetXp: 240,
+    maintenancePercent: 57,
   ),
   LevelDefinition(
     number: 4,
     name: 'Studio-Stammgast',
     description: 'Dein Training hat einen festen Platz im Alltag.',
-    maintenanceXp: 160,
-    promotionXp: 320,
+    targetXp: 320,
+    maintenancePercent: 60,
   ),
   LevelDefinition(
     number: 5,
     name: 'Eisenbeißer',
     description: 'Du bleibst dran, auch wenn die erste Motivation nachlässt.',
-    maintenanceXp: 240,
-    promotionXp: 400,
+    targetXp: 400,
+    maintenancePercent: 63,
   ),
   LevelDefinition(
     number: 6,
     name: 'Hantel-Rebell',
     description: 'Du ziehst dein Training konsequent durch.',
-    maintenanceXp: 320,
-    promotionXp: 480,
+    targetXp: 480,
+    maintenancePercent: 67,
   ),
   LevelDefinition(
     number: 7,
     name: 'Eisen-Rockstar',
     description: 'Regelmäßigkeit ist dein Markenzeichen.',
-    maintenanceXp: 400,
-    promotionXp: 560,
+    targetXp: 560,
+    maintenancePercent: 70,
   ),
   LevelDefinition(
     number: 8,
     name: 'Gym-Headliner',
-    description: 'Du lieferst über die ganze Runde ab.',
-    maintenanceXp: 480,
-    promotionXp: 640,
+    description: 'Du lieferst über den ganzen Monat ab.',
+    targetXp: 640,
+    maintenancePercent: 73,
   ),
   LevelDefinition(
     number: 9,
     name: 'Eisen-Legende',
     description: 'Ein starker Rang braucht dauerhaft starke Gewohnheiten.',
-    maintenanceXp: 560,
-    promotionXp: 720,
+    targetXp: 720,
+    maintenancePercent: 77,
   ),
   LevelDefinition(
     number: 10,
     name: 'RepStar-Legende',
     description: 'Ganz oben angekommen. Jetzt zählt, dass du dranbleibst.',
-    maintenanceXp: 720,
-    promotionXp: null,
+    targetXp: 900,
+    maintenancePercent: 80,
   ),
 ];

@@ -8,11 +8,21 @@ import 'package:repstar/models/training_session.dart';
 class TrainingRewardService {
   const TrainingRewardService();
 
-  /// Änderungen an der Formel erhalten später eine neue Versionsnummer.
-  static const int calculationVersion = 1;
+  /// Version 2 ergänzt die Mindestdauer für Trainingspunkte.
+  static const int calculationVersion = 2;
+
+  /// Gemeinsame Mindestdauer für Berechnung und Monatsauswertung.
+  static const Duration minimumXpDuration = Duration(minutes: 30);
 
   /// Einheitliches Bezugsgewicht für körpergewichtsunabhängige Rangpunkte.
   static const double referenceBodyWeightKg = 80;
+
+  /// Prüft ausschließlich die zeitliche Voraussetzung.
+  ///
+  /// Gültige abgeschlossene Sätze werden zusätzlich in calculate geprüft.
+  static bool meetsMinimumXpDuration(TrainingSession session) {
+    return session.duration >= minimumXpDuration;
+  }
 
   TrainingReward calculate({
     required TrainingPlan training,
@@ -27,11 +37,9 @@ class TrainingRewardService {
     var completedSets = 0;
     var completedRepetitions = 0;
     var estimatedSeconds = 0.0;
-
-    // Summe aus modellierter Ausführungszeit und zusätzlicher Belastung.
     var effortSeconds = 0.0;
 
-    // Verhindert eine doppelte Wertung bei versehentlich doppelten IDs.
+    // Verhindert eine doppelte Wertung bei doppelten Übungskennungen.
     final processedExerciseIds = <String>{};
 
     for (final exercise in training.exercises) {
@@ -87,7 +95,7 @@ class TrainingRewardService {
       session.duration.inMicroseconds / Duration.microsecondsPerSecond,
     );
 
-    // Die geschätzte Ausführungszeit kann nicht länger als die Einheit sein.
+    // Die geschätzte Ausführungszeit darf die Gesamtdauer nicht überschreiten.
     final timeScale = estimatedSeconds > 0
         ? math.min(1.0, elapsedSeconds / estimatedSeconds)
         : 0.0;
@@ -95,14 +103,18 @@ class TrainingRewardService {
     final adjustedActiveSeconds = estimatedSeconds * timeScale;
     final adjustedEffortHours = effortSeconds * timeScale / 3600;
 
-    // Punkte verwenden immer dasselbe Bezugsgewicht.
-    final earnedXp = (adjustedEffortHours * referenceBodyWeightKg).round();
+    // Erst ab 30 Minuten Gesamtdauer werden Punkte vergeben.
+    // Längeres Warten erhöht die berechneten Satzpunkte nicht.
+    final earnedXp = meetsMinimumXpDuration(session)
+        ? (adjustedEffortHours * referenceBodyWeightKg).round()
+        : 0;
 
     final bodyWeight = session.bodyWeightKg;
 
     final hasValidBodyWeight =
         bodyWeight != null && bodyWeight.isFinite && bodyWeight > 0;
 
+    // Die Kalorienschätzung bleibt unabhängig von der XP-Mindestdauer.
     final estimatedActiveKcal = hasValidBodyWeight
         ? adjustedEffortHours * bodyWeight
         : null;

@@ -5,10 +5,11 @@ import 'package:repstar/models/exercise_settings.dart';
 import 'package:repstar/models/training_plan.dart';
 import 'package:repstar/models/training_session.dart';
 import 'package:repstar/models/workouts_set.dart';
+import 'package:repstar/services/training_reward_service.dart';
 import 'package:repstar/widgets/training_exercise_card.dart';
 import 'package:vibration/vibration.dart';
 
-/// Zeigt das laufende Training mit Timer und Übungskarten.
+/// Zeigt das laufende Training mit Timern und Übungskarten.
 class ActiveTrainingScreen extends StatefulWidget {
   final TrainingPlan training;
   final TrainingSession? previousSession;
@@ -20,8 +21,7 @@ class ActiveTrainingScreen extends StatefulWidget {
   });
 
   @override
-  State<ActiveTrainingScreen> createState() =>
-      _ActiveTrainingScreenState();
+  State<ActiveTrainingScreen> createState() => _ActiveTrainingScreenState();
 }
 
 class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
@@ -61,8 +61,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     for (final exercise in widget.training.exercises) {
       _exerciseKeys[exercise.id] = GlobalKey();
 
-      final previousSets =
-          widget.previousSession?.setsByExercise[exercise.id];
+      final previousSets = widget.previousSession?.setsByExercise[exercise.id];
 
       final previousSettings =
           widget.previousSession?.settingsByExercise[exercise.id];
@@ -76,10 +75,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       }
 
       if (previousSets == null || previousSets.isEmpty) {
-        _setsByExercise[exercise.id] = List.generate(
-          3,
-          (_) => WorkoutSet(),
-        );
+        _setsByExercise[exercise.id] = List.generate(3, (_) => WorkoutSet());
       } else {
         // Letzte Werte übernehmen; die Häkchen starten wieder leer.
         _setsByExercise[exercise.id] = previousSets
@@ -97,14 +93,11 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       _expandedExerciseId = widget.training.exercises.first.id;
     }
 
-    // Ein gemeinsamer Timer aktualisiert Trainingsdauer und Pausenanzeige.
-    _timer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => _updateTimers(),
-    );
+    // Ein Timer aktualisiert Trainingsdauer, XP-Status und Pausenanzeige.
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _updateTimers());
   }
 
-  /// Prüft, ob wirklich alle vorhandenen Sätze einer Übung abgehakt sind.
+  /// Prüft, ob alle vorhandenen Sätze einer Übung abgehakt sind.
   bool _isExerciseCompleted(String exerciseId) {
     final sets = _setsByExercise[exerciseId];
 
@@ -152,7 +145,6 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
 
     final nextExerciseId = _findNextIncompleteExercise(exerciseId);
 
-    // Beim Wechsel die Bildschirmtastatur schließen.
     FocusScope.of(context).unfocus();
 
     setState(() {
@@ -171,7 +163,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     }
   }
 
-  /// Ermöglicht weiterhin das manuelle Öffnen und Schließen einer Karte.
+  /// Ermöglicht das manuelle Öffnen und Schließen einer Karte.
   void _onExpansionChanged(String exerciseId, bool expanded) {
     if (_canLeave) {
       return;
@@ -190,7 +182,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     });
   }
 
-  /// Scrollt nach der Aufklappanimation einmal zur ausgewählten Karte.
+  /// Scrollt nach der Aufklappanimation zur ausgewählten Karte.
   void _onExpansionAnimationEnd(String exerciseId) {
     if (!mounted ||
         _canLeave ||
@@ -199,14 +191,11 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       return;
     }
 
-    // Spätere Größenänderungen, etwa durch ein geladenes Bild,
-    // sollen kein erneutes automatisches Scrollen auslösen.
+    // Spätere Größenänderungen sollen kein weiteres Scrollen auslösen.
     _pendingScrollExerciseId = null;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          _canLeave ||
-          _expandedExerciseId != exerciseId) {
+      if (!mounted || _canLeave || _expandedExerciseId != exerciseId) {
         return;
       }
 
@@ -227,7 +216,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     });
   }
 
-  /// Aktualisiert beide Anzeigen und erkennt das Ende einer Pause.
+  /// Aktualisiert die Zeitanzeigen und erkennt das Ende einer Pause.
   void _updateTimers() {
     if (!mounted || _canLeave) {
       return;
@@ -238,6 +227,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     var restFinished = false;
 
     setState(() {
+      // Die Startzeit ist die Grundlage, nicht die Anzahl der Timer-Aufrufe.
       _elapsed = now.difference(_startedAt);
 
       if (restEndsAt != null) {
@@ -249,8 +239,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
           restFinished = true;
         } else {
           _restRemainingSeconds =
-              (remaining.inMicroseconds /
-                      Duration.microsecondsPerSecond)
+              (remaining.inMicroseconds / Duration.microsecondsPerSecond)
                   .ceil();
         }
       }
@@ -260,9 +249,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       unawaited(_vibrateRestEnd());
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pause vorbei – weiter geht’s!'),
-        ),
+        const SnackBar(content: Text('Pause vorbei – weiter geht’s!')),
       );
     }
   }
@@ -274,9 +261,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     }
 
     setState(() {
-      _restEndsAt = DateTime.now().add(
-        Duration(seconds: _restDurationSeconds),
-      );
+      _restEndsAt = DateTime.now().add(Duration(seconds: _restDurationSeconds));
       _restRemainingSeconds = _restDurationSeconds;
     });
   }
@@ -327,15 +312,100 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     }
   }
 
-  /// Formatiert die Dauer beispielsweise als 00:12:35.
+  /// Formatiert die gesamte Trainingsdauer als Stunden:Minuten:Sekunden.
   String _formatDuration(Duration duration) {
     final hours = duration.inHours.toString().padLeft(2, '0');
-    final minutes =
-        (duration.inMinutes % 60).toString().padLeft(2, '0');
-    final seconds =
-        (duration.inSeconds % 60).toString().padLeft(2, '0');
+    final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
 
     return '$hours:$minutes:$seconds';
+  }
+
+  /// Gemeinsame Formatierung für Pausen- und XP-Countdown.
+  String _formatCountdown(int totalSeconds) {
+    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+
+    return '$minutes:$seconds';
+  }
+
+  /// Zeigt die verbleibende Zeit bis zur zeitlichen XP-Freigabe.
+  Widget _buildXpStatus() {
+    // Verwendet dieselbe Grenze wie die tatsächliche Punkteberechnung.
+    final minimumDuration = TrainingRewardService.minimumXpDuration;
+    final minimumReached = _elapsed >= minimumDuration;
+
+    final String label;
+
+    if (minimumReached) {
+      label = 'XP-Mindestdauer erreicht';
+    } else {
+      final remaining = minimumDuration - _elapsed;
+
+      // Aufrunden verhindert eine vorzeitige Anzeige von 00:00.
+      final remainingSeconds =
+          (remaining.inMicroseconds / Duration.microsecondsPerSecond).ceil();
+
+      label = 'XP-Freigabe in ${_formatCountdown(remainingSeconds)}';
+    }
+
+    final color = minimumReached
+        ? Theme.of(context).colorScheme.primary
+        : Colors.white70;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          minimumReached
+              ? Icons.check_circle_outline
+              : Icons.lock_clock_outlined,
+          color: color,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontWeight: minimumReached ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Zeigt den Trainingstimer und direkt darunter den XP-Status.
+  Widget _buildTrainingTimer() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.timer_outlined,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _formatDuration(_elapsed),
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _buildXpStatus(),
+        ],
+      ),
+    );
   }
 
   /// Erlaubt das Schließen und liefert optional eine fertige Einheit.
@@ -406,19 +476,9 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
   /// Zeigt Pausenlänge, Countdown und Steuerung.
   Widget _buildRestTimer() {
     final isResting = _restEndsAt != null;
-    final minutes =
-        (_restRemainingSeconds ~/ 60).toString().padLeft(2, '0');
-    final seconds =
-        (_restRemainingSeconds % 60).toString().padLeft(2, '0');
 
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -429,12 +489,9 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
           children: [
             Text(
               isResting
-                  ? 'Satzpause: $minutes:$seconds'
+                  ? 'Satzpause: ${_formatCountdown(_restRemainingSeconds)}'
                   : 'Pausentimer bereit',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             Row(
               children: [
@@ -519,6 +576,12 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
   }
 
   @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return PopScope<TrainingSession>(
       canPop: _canLeave,
@@ -528,35 +591,12 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.training.name),
-        ),
+        appBar: AppBar(title: Text(widget.training.name)),
         body: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.timer_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatDuration(_elapsed),
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildTrainingTimer(),
             _buildRestTimer(),
-            Expanded(
-              child: _buildExerciseList(),
-            ),
+            Expanded(child: _buildExerciseList()),
           ],
         ),
         bottomNavigationBar: SafeArea(

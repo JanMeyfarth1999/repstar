@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:repstar/data/level_library.dart';
 import 'package:repstar/models/level_progress.dart';
 
-/// Zeigt den aktuellen Rang und die Punkte der laufenden Monatsrunde.
+/// Zeigt Rang, Monatspunkte und die Grenze für den Klassenerhalt.
 class RankScreen extends StatelessWidget {
   final LevelProgress progress;
   final int monthlyXp;
@@ -16,6 +16,8 @@ class RankScreen extends StatelessWidget {
     required this.monthlyXp,
     required this.now,
   });
+
+  static const Color _maintenanceColor = Color(0xFFFFC857);
 
   String _formatDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
@@ -33,16 +35,26 @@ class RankScreen extends StatelessWidget {
           child: Text(
             'Jede Runde dauert einen Kalendermonat und endet am '
             '1. des nächsten Monats um 00:00 Uhr UTC.\n\n'
-            'Unter dem Klassenerhalt-Ziel sinkst du um einen Rang. '
-            'Erreichst du dieses Ziel, hältst du deinen Rang. '
-            'Erreichst du das Aufstiegsziel, steigst du um einen Rang.\n\n'
-            'Der Rangwechsel erfolgt zum Monatswechsel. '
+            'Der goldene Punkt am Ring markiert die benötigten '
+            'Punkte für den Klassenerhalt.\n\n'
+            'Unter dieser Grenze sinkst du um einen Rang. '
+            'Erreichst du sie, hältst du deinen Rang. '
+            'Beim Aufstiegsziel steigst du um einen Rang.\n\n'
+            'Die Grenze für den Klassenerhalt steigt mit dem Rang '
+            'von 50 auf 80 Prozent des Monatsziels.\n\n'
+            'Rang 1 kann nicht unterschritten werden, auch wenn '
+            'sein Erhaltungsziel verfehlt wird.\n\n'
+            'Im höchsten Rang liegt der Klassenerhalt bei '
+            '80 Prozent des vollständigen Rings. '
+            'Ein weiterer Aufstieg ist dort nicht möglich.\n\n'
+            'Rangwechsel erfolgen zum Monatswechsel. '
             'Danach beginnen die Monatspunkte wieder bei null. '
             'Deine Trainingseinheiten bleiben gespeichert.\n\n'
+            'Nur Trainingseinheiten mit mindestens 30 Minuten '
+            'Gesamtdauer zählen zur Punktewertung.\n\n'
             'Pro Monat ist höchstens ein Rangwechsel möglich. '
-            'Rang 1 ist die Untergrenze, Rang 10 die Obergrenze.\n\n'
-            'Wird die App mehrere Monate nicht geöffnet, werden '
-            'die vergangenen Monate beim nächsten Öffnen ausgewertet.',
+            'Vergangene Monate werden beim nächsten Öffnen '
+            'der App nacheinander ausgewertet.',
           ),
         ),
         actions: [
@@ -60,8 +72,10 @@ class RankScreen extends StatelessWidget {
     final definition = levelLibrary[progress.level - 1];
     final promotionXp = definition.promotionXp;
 
-    // Beim höchsten Rang zeigt der Kreis das Ziel für den Klassenerhalt.
-    final targetXp = promotionXp ?? definition.maintenanceXp;
+    // Jeder Rang hat ein eigenes Ringziel.
+    // Im höchsten Rang liegt der Klassenerhalt bei 80 % dieses Ziels.
+    final targetXp = definition.targetXp;
+
     final fraction = targetXp > 0
         ? (monthlyXp / targetXp).clamp(0.0, 1.0).toDouble()
         : 1.0;
@@ -69,6 +83,8 @@ class RankScreen extends StatelessWidget {
     final maintenanceFraction = targetXp > 0
         ? (definition.maintenanceXp / targetXp).clamp(0.0, 1.0).toDouble()
         : 0.0;
+
+    final maintenanceReached = monthlyXp >= definition.maintenanceXp;
 
     final remainingSeconds = progress.periodEndsAt
         .difference(now.toUtc())
@@ -86,7 +102,7 @@ class RankScreen extends StatelessWidget {
     if (promotionXp != null && monthlyXp >= promotionXp) {
       status = 'Aufstieg zum Monatswechsel gesichert!';
       statusIcon = Icons.trending_up;
-    } else if (monthlyXp < definition.maintenanceXp) {
+    } else if (!maintenanceReached) {
       final missingXp = definition.maintenanceXp - monthlyXp;
       status = 'Noch $missingXp XP zum Klassenerhalt.';
       statusIcon = Icons.shield_outlined;
@@ -156,14 +172,16 @@ class RankScreen extends StatelessWidget {
         ),
         const SizedBox(height: 24),
 
-        // Der Ring passt sich der verfügbaren Bildschirmbreite an.
         LayoutBuilder(
           builder: (context, constraints) {
             final size = math.min(constraints.maxWidth, 360.0);
 
             return Center(
               child: Semantics(
-                label: '$monthlyXp von $targetXp Monatspunkten',
+                label:
+                    '$monthlyXp Monatspunkte. '
+                    'Klassenerhalt bei ${definition.maintenanceXp} XP. '
+                    '${promotionXp == null ? 'Höchster Rang.' : 'Aufstieg bei $promotionXp XP.'}',
                 child: SizedBox(
                   width: size,
                   height: size,
@@ -173,6 +191,10 @@ class RankScreen extends StatelessWidget {
                       maintenanceFraction: maintenanceFraction,
                       color: accentColor,
                       trackColor: Colors.white10,
+                      maintenanceColor: _maintenanceColor,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).scaffoldBackgroundColor,
                     ),
                     child: Padding(
                       padding: EdgeInsets.all(size * 0.16),
@@ -189,7 +211,7 @@ class RankScreen extends StatelessWidget {
                                   letterSpacing: 1.5,
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 10),
                               Text(
                                 '$monthlyXp',
                                 style: const TextStyle(
@@ -197,18 +219,25 @@ class RankScreen extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                              const SizedBox(height: 6),
+
+                              // Beide Ziele sind direkt im Ring ablesbar.
                               Text(
-                                'Ziel: $targetXp XP',
-                                style: const TextStyle(fontSize: 18),
+                                'Klassenerhalt: '
+                                '${definition.maintenanceXp} XP',
+                                style: const TextStyle(
+                                  color: _maintenanceColor,
+                                  fontSize: 16,
+                                ),
                               ),
                               const SizedBox(height: 6),
                               Text(
                                 promotionXp == null
-                                    ? 'Klassenerhalt'
-                                    : 'Aufstieg',
-                                style: const TextStyle(color: Colors.white70),
+                                    ? 'Höchster Rang'
+                                    : 'Aufstieg: $promotionXp XP',
+                                style: const TextStyle(fontSize: 18),
                               ),
-                              const SizedBox(height: 18),
+                              const SizedBox(height: 16),
                               Text(
                                 remainingDays == 0
                                     ? 'Monatswechsel'
@@ -231,13 +260,37 @@ class RankScreen extends StatelessWidget {
           },
         ),
         const SizedBox(height: 20),
-        if (definition.maintenanceXp > 0)
-          Text(
-            'Weiße Markierung: Klassenerhalt bei '
-            '${definition.maintenanceXp} XP',
+
+        // Diese Erklärung erscheint auch bei Rang 1 mit 0 XP.
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.circle, size: 12, color: _maintenanceColor),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Klassenerhalt bei ${definition.maintenanceXp} XP',
+                style: const TextStyle(color: _maintenanceColor),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              maintenanceReached
+                  ? Icons.check_circle_outline
+                  : Icons.lock_outline,
+              size: 18,
+              color: maintenanceReached ? accentColor : Colors.white54,
+            ),
+          ],
+        ),
+        if (definition.number == 1) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Im ersten Rang ist kein Abstieg möglich.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: TextStyle(color: Colors.white70, fontSize: 12),
           ),
+        ],
         const SizedBox(height: 16),
         Card(
           child: Padding(
@@ -277,8 +330,6 @@ class RankScreen extends StatelessWidget {
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-
-        // Alle Ränge stammen aus derselben zentralen Liste.
         for (final level in levelLibrary)
           Card(
             shape: RoundedRectangleBorder(
@@ -315,18 +366,22 @@ class RankScreen extends StatelessWidget {
   }
 }
 
-/// Zeichnet Fortschritt und die Schwelle zum Klassenerhalt.
+/// Zeichnet den Fortschritt und einen festen Punkt für den Klassenerhalt.
 class _RankRingPainter extends CustomPainter {
   final double progress;
   final double maintenanceFraction;
   final Color color;
   final Color trackColor;
+  final Color maintenanceColor;
+  final Color backgroundColor;
 
   const _RankRingPainter({
     required this.progress,
     required this.maintenanceFraction,
     required this.color,
     required this.trackColor,
+    required this.maintenanceColor,
+    required this.backgroundColor,
   });
 
   @override
@@ -336,12 +391,12 @@ class _RankRingPainter extends CustomPainter {
     final radius = size.shortestSide / 2 - strokeWidth;
     final circle = Rect.fromCircle(center: center, radius: radius);
 
-    final paint = Paint()
+    final ringPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
 
-    canvas.drawCircle(center, radius, paint..color = trackColor);
+    canvas.drawCircle(center, radius, ringPaint..color = trackColor);
 
     if (progress > 0) {
       canvas.drawArc(
@@ -349,25 +404,21 @@ class _RankRingPainter extends CustomPainter {
         -math.pi / 2,
         math.pi * 2 * progress,
         false,
-        paint..color = color,
+        ringPaint..color = color,
       );
     }
 
-    if (maintenanceFraction > 0) {
-      final angle = -math.pi / 2 + math.pi * 2 * maintenanceFraction;
+    // Die Position ergibt sich aus Klassenerhalt / Ringziel.
+    // Bei 0 XP liegt der Punkt oben am Anfang des Rings.
+    final angle = -math.pi / 2 + math.pi * 2 * maintenanceFraction;
 
-      final direction = Offset(math.cos(angle), math.sin(angle));
+    final markerPosition =
+        center + Offset(math.cos(angle), math.sin(angle)) * radius;
 
-      // Ein weißer Strich markiert die Grenze für den Klassenerhalt.
-      canvas.drawLine(
-        center + direction * (radius - strokeWidth / 2 - 4),
-        center + direction * (radius + strokeWidth / 2 + 4),
-        Paint()
-          ..color = Colors.white
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round,
-      );
-    }
+    // Dunkler Rand hebt die Markierung vom Fortschrittsring ab.
+    canvas.drawCircle(markerPosition, 12, Paint()..color = backgroundColor);
+
+    canvas.drawCircle(markerPosition, 8, Paint()..color = maintenanceColor);
   }
 
   @override
@@ -375,6 +426,8 @@ class _RankRingPainter extends CustomPainter {
     return progress != oldDelegate.progress ||
         maintenanceFraction != oldDelegate.maintenanceFraction ||
         color != oldDelegate.color ||
-        trackColor != oldDelegate.trackColor;
+        trackColor != oldDelegate.trackColor ||
+        maintenanceColor != oldDelegate.maintenanceColor ||
+        backgroundColor != oldDelegate.backgroundColor;
   }
 }
