@@ -8,7 +8,10 @@ class TrainingReward {
   /// Geschätzte reine Ausführungszeit der gewerteten Sätze.
   final double estimatedActiveSeconds;
 
-  /// Modellschätzung für den zusätzlichen Verbrauch während der Sätze.
+  /// Geschätzter Verbrauch über den Ruheanteil hinaus.
+  /// Ab Berechnungsversion 3 gilt die gesamte Trainingseinheit inklusive
+  /// üblicher Satzpausen als Grundlage. Ältere Werte beziehen sich nur
+  /// auf die geschätzten Satz-Ausführungszeiten und werden nicht umgerechnet.
   /// Ohne bekanntes Körpergewicht bleibt dieser Wert null.
   final double? estimatedActiveKcal;
 

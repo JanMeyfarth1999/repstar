@@ -8,14 +8,20 @@ import 'package:repstar/models/training_session.dart';
 class TrainingRewardService {
   const TrainingRewardService();
 
-  /// Version 2 ergänzt die Mindestdauer für Trainingspunkte.
-  static const int calculationVersion = 2;
+  /// Version 3 schätzt Kalorien über die gesamte Trainingseinheit.
+  static const int calculationVersion = 3;
 
   /// Gemeinsame Mindestdauer für Berechnung und Monatsauswertung.
   static const Duration minimumXpDuration = Duration(minutes: 30);
 
   /// Einheitliches Bezugsgewicht für körpergewichtsunabhängige Rangpunkte.
   static const double referenceBodyWeightKg = 80;
+
+  /// Grober Durchschnitt für Krafttraining mit mehreren Übungen.
+  /// Quelle: 2024 Adult Compendium, Aktivität 02054 (3,5 MET).
+  /// Als Modell für eine Einheit mit üblichen Satzpausen verwendet.
+  /// Längere Unterbrechungen oder tatsächliche Intensität erkennt es nicht.
+  static const double sessionAverageMet = 3.5;
 
   /// Prüft ausschließlich die zeitliche Voraussetzung.
   ///
@@ -114,9 +120,18 @@ class TrainingRewardService {
     final hasValidBodyWeight =
         bodyWeight != null && bodyWeight.isFinite && bodyWeight > 0;
 
-    // Die Kalorienschätzung bleibt unabhängig von der XP-Mindestdauer.
+    // Kalorien werden unabhängig von den XP über die gesamte Einheit
+    // geschätzt. Der MET-Wert beschreibt den Durchschnitt der Einheit,
+    // nicht nur die kurzen Ausführungszeiten der einzelnen Sätze.
+    //
+    // Näherung: aktive kcal = (MET - 1) × kg × Stunden.
+    // Ein MET wird als Ruheanteil abgezogen. Übliche Satzpausen sind
+    // Teil des angenommenen Einheitsdurchschnitts, kein Nachverbrauch.
+    // Ohne gültigen abgeschlossenen Satz wird kein Training angenommen.
     final estimatedActiveKcal = hasValidBodyWeight
-        ? adjustedEffortHours * bodyWeight
+        ? completedSets == 0
+              ? 0.0
+              : (sessionAverageMet - 1) * bodyWeight * elapsedSeconds / 3600
         : null;
 
     return TrainingReward(

@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'package:repstar/screens/training_history_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:repstar/data/level_library.dart';
 import 'package:repstar/models/level_progress.dart';
@@ -525,8 +525,12 @@ class _TrainingScreenState extends State<TrainingScreen>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Grobes Modell für die Satz-Ausführung. '
-                  'Pausen und Nachverbrauch sind nicht enthalten.',
+                  reward.calculationVersion >= 3
+                      ? 'Grobe Schätzung für die gesamte Einheit mit üblichen '
+                            'Satzpausen, abzüglich Ruheanteil. Längere '
+                            'Unterbrechungen werden nicht erkannt.'
+                      : 'Ältere Schätzung nur für die Satz-Ausführung. '
+                            'Pausen und Nachverbrauch sind nicht enthalten.',
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -667,6 +671,7 @@ class _TrainingScreenState extends State<TrainingScreen>
     );
   }
 
+  /// Zeigt Ladezustand, Fehler oder die drei Hauptseiten.
   Widget _buildContent() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -691,7 +696,7 @@ class _TrainingScreenState extends State<TrainingScreen>
       );
     }
 
-    // Beide Seiten greifen auf denselben Datenstand zu.
+    // Alle Seiten greifen auf denselben geladenen Datenstand zu.
     return IndexedStack(
       index: _selectedPage,
       children: [
@@ -710,6 +715,10 @@ class _TrainingScreenState extends State<TrainingScreen>
           ),
           now: _now,
         ),
+        TrainingHistoryScreen(
+          trainings: _trainings,
+          sessions: _allSessions.toList(growable: false),
+        ),
       ],
     );
   }
@@ -725,10 +734,11 @@ class _TrainingScreenState extends State<TrainingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _selectedPage == 0 ? 'Training' : 'Dein Rang',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(switch (_selectedPage) {
+          0 => 'Training',
+          1 => 'Dein Rang',
+          _ => 'Trainingsverlauf',
+        }, style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           const ThemeModeButton(),
 
@@ -786,6 +796,11 @@ class _TrainingScreenState extends State<TrainingScreen>
             icon: Icon(Icons.emoji_events_outlined),
             selectedIcon: Icon(Icons.emoji_events),
             label: 'Dein Rang',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'Verlauf',
           ),
         ],
       ),
