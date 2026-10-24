@@ -1,3 +1,4 @@
+import 'package:repstar/screens/exercise_progress_screen.dart';
 import 'dart:async';
 import 'package:repstar/screens/training_history_screen.dart';
 import 'package:flutter/material.dart';
@@ -516,6 +517,12 @@ class _TrainingScreenState extends State<TrainingScreen>
                 Text('${reward.completedSets} Sätze abgeschlossen'),
                 const SizedBox(height: 6),
                 Text('${reward.completedRepetitions} Wiederholungen'),
+                const SizedBox(height: 6),
+                Text(
+                  'Bewegtes Gewicht: '
+                  '${session.totalVolumeKg.toStringAsFixed(1).replaceAll('.', ',')} kg',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(height: 16),
                 Text(
                   reward.estimatedActiveKcal == null
@@ -719,6 +726,10 @@ class _TrainingScreenState extends State<TrainingScreen>
           trainings: _trainings,
           sessions: _allSessions.toList(growable: false),
         ),
+        ExerciseProgressScreen(
+          trainings: _trainings,
+          sessions: _allSessions.toList(growable: false),
+        ),
       ],
     );
   }
@@ -737,7 +748,8 @@ class _TrainingScreenState extends State<TrainingScreen>
         title: Text(switch (_selectedPage) {
           0 => 'Training',
           1 => 'Dein Rang',
-          _ => 'Trainingsverlauf',
+          2 => 'Trainingsverlauf',
+          _ => 'Fortschritt',
         }, style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           const ThemeModeButton(),
@@ -801,6 +813,11 @@ class _TrainingScreenState extends State<TrainingScreen>
             icon: Icon(Icons.history_outlined),
             selectedIcon: Icon(Icons.history),
             label: 'Verlauf',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.show_chart),
+            selectedIcon: Icon(Icons.show_chart),
+            label: 'Fortschritt',
           ),
         ],
       ),

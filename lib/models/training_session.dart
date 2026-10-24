@@ -55,6 +55,32 @@ class TrainingSession {
 
   Duration get duration => endedAt.difference(startedAt);
 
+  /// Summiert Gewicht × Wiederholungen aller gültigen erledigten Sätze.
+  double get totalVolumeKg {
+    var total = 0.0;
+
+    for (final sets in setsByExercise.values) {
+      for (final workoutSet in sets) {
+        final weight = workoutSet.weight;
+        final repetitions = workoutSet.repetitions;
+
+        // Offene Sätze und ungültige Eingaben nicht berücksichtigen.
+        if (!workoutSet.isCompleted ||
+            weight == null ||
+            !weight.isFinite ||
+            weight < 0 ||
+            repetitions == null ||
+            repetitions <= 0) {
+          continue;
+        }
+
+        total += weight * repetitions;
+      }
+    }
+
+    return total;
+  }
+
   /// Erstellt eine Kopie mit der berechneten Auswertung.
   TrainingSession withReward(TrainingReward calculatedReward) {
     return TrainingSession(

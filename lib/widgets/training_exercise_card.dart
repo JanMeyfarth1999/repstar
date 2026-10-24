@@ -18,6 +18,9 @@ class TrainingExerciseCard extends StatefulWidget {
   final ValueChanged<ExerciseSettings?> onSettingsChanged;
   final VoidCallback onSetCompleted;
 
+  /// Meldet geänderte Eingaben für die automatische Zwischenspeicherung.
+  final VoidCallback? onChanged;
+
   const TrainingExerciseCard({
     super.key,
     required this.exercise,
@@ -28,19 +31,22 @@ class TrainingExerciseCard extends StatefulWidget {
     required this.onExpansionAnimationEnd,
     required this.onSettingsChanged,
     required this.onSetCompleted,
+    this.onChanged,
   });
 
   @override
-  State<TrainingExerciseCard> createState() =>
-      _TrainingExerciseCardState();
+  State<TrainingExerciseCard> createState() => _TrainingExerciseCardState();
 }
 
 class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
+  /// Ergänzt einen neuen, leeren Satz.
   /// Ergänzt einen neuen, leeren Satz.
   void _addSet() {
     setState(() {
       widget.sets.add(WorkoutSet());
     });
+
+    widget.onChanged?.call();
   }
 
   /// Entfernt einen Satz. Mindestens ein Satz bleibt erhalten.
@@ -52,6 +58,8 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
     setState(() {
       widget.sets.removeAt(index);
     });
+
+    widget.onChanged?.call();
   }
 
   /// Hakt einen Satz nach Prüfung der Eingaben ab.
@@ -80,10 +88,13 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
       workoutSet.isCompleted = !workoutSet.isCompleted;
     });
 
-    // Der Bildschirm prüft danach auch den Abschluss der ganzen Übung.
+    // Startet weiterhin die Pause und gegebenenfalls die nächste Übung.
     if (workoutSet.isCompleted) {
       widget.onSetCompleted();
     }
+
+    // Auch das Entfernen eines Häkchens muss gesichert werden.
+    widget.onChanged?.call();
   }
 
   /// Baut die gemeinsame Darstellung einer Satzzeile.
@@ -121,6 +132,8 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
                   workoutSet.repetitions = int.tryParse(value.trim());
                   workoutSet.isCompleted = false;
                 });
+
+                widget.onChanged?.call();
               },
             ),
           ),
@@ -143,6 +156,8 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
                   );
                   workoutSet.isCompleted = false;
                 });
+
+                widget.onChanged?.call();
               },
             ),
           ),
@@ -154,9 +169,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
           IconButton(
             tooltip: 'Satz entfernen',
             icon: const Icon(Icons.remove_circle_outline),
-            onPressed: widget.sets.length > 1
-                ? () => _removeSet(index)
-                : null,
+            onPressed: widget.sets.length > 1 ? () => _removeSet(index) : null,
           ),
         ],
       ),
@@ -186,9 +199,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text('Geräteeinstellungen'),
-            ),
+            const Expanded(child: Text('Geräteeinstellungen')),
             IconButton(
               tooltip: 'Geräteeinstellungen entfernen',
               onPressed: () {
@@ -207,6 +218,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
           ),
           onChanged: (value) {
             settings.seatHeight = value;
+            widget.onChanged?.call();
           },
         ),
         const SizedBox(height: 12),
@@ -219,6 +231,7 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
           ),
           onChanged: (value) {
             settings.otherAdjustments = value;
+            widget.onChanged?.call();
           },
         ),
       ],
@@ -286,20 +299,14 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
             ),
             title: Text(
               widget.exercise.name,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
               '$completedSets von ${widget.sets.length} Sätzen erledigt.',
-              style: TextStyle(
-                color: allCompleted ? accentColor : null,
-              ),
+              style: TextStyle(color: allCompleted ? accentColor : null),
             ),
             trailing: Icon(
-              widget.isExpanded
-                  ? Icons.expand_less
-                  : Icons.expand_more,
+              widget.isExpanded ? Icons.expand_less : Icons.expand_more,
               color: allCompleted ? accentColor : null,
             ),
             onTap: () {
@@ -312,15 +319,10 @@ class _TrainingExerciseCardState extends State<TrainingExerciseCard> {
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeInOut,
             alignment: Alignment.topCenter,
-            onEnd: widget.isExpanded
-                ? widget.onExpansionAnimationEnd
-                : null,
+            onEnd: widget.isExpanded ? widget.onExpansionAnimationEnd : null,
             child: widget.isExpanded
                 ? _buildExpandedContent()
-                : const SizedBox(
-                    width: double.infinity,
-                    height: 0,
-                  ),
+                : const SizedBox(width: double.infinity, height: 0),
           ),
         ],
       ),

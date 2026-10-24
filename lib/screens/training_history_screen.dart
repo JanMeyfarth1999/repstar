@@ -174,6 +174,10 @@ class _TrainingSessionDetailsScreen extends StatelessWidget {
                     value: '$completedSets',
                   ),
                   _DetailLine(
+                    label: 'Bewegtes Gewicht',
+                    value: '${_HistoryFormat.weight(session.totalVolumeKg)} kg',
+                  ),
+                  _DetailLine(
                     label: 'Körpergewicht beim Start',
                     value: session.bodyWeightKg == null
                         ? 'Nicht angegeben'
