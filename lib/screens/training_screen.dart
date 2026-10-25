@@ -794,10 +794,12 @@ class _TrainingScreenState extends State<TrainingScreen>
                     IconButton(
                       tooltip: 'Training bearbeiten',
                       icon: const Icon(Icons.edit_outlined),
+
+                      // Der Stift öffnet die Vorlage zum Bearbeiten.
                       onPressed:
                           _isSaving || _checkingDraft || _draftProblem != null
                           ? null
-                          : () => _startTraining(training),
+                          : () => _editTraining(training),
                     ),
                   ],
                 ),

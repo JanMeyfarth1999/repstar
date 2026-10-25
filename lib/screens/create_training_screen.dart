@@ -54,19 +54,14 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
       }
     });
   }
-
-  /// Verschiebt eine Übung innerhalb der Trainingsreihenfolge.
-  void _reorderExercises(int oldIndex, int newIndex) {
-    setState(() {
-      // Beim Verschieben nach unten verändert das Entfernen den Zielindex.
-      if (newIndex > oldIndex) {
-        newIndex -= 1;
-      }
-
-      final exercise = _selectedExercises.removeAt(oldIndex);
-      _selectedExercises.insert(newIndex, exercise);
-    });
-  }
+/// Verschiebt eine Übung innerhalb der Trainingsreihenfolge.
+void _reorderExercises(int oldIndex, int newIndex) {
+  setState(() {
+    // onReorderItem liefert bereits den korrigierten Zielindex.
+    final exercise = _selectedExercises.removeAt(oldIndex);
+    _selectedExercises.insert(newIndex, exercise);
+  });
+}
 
   /// Prüft die Eingaben und gibt das Training an die Startseite zurück.
   void _saveTraining() {
@@ -127,7 +122,7 @@ class _CreateTrainingScreenState extends State<CreateTrainingScreen> {
               itemExtent: 72,
               buildDefaultDragHandles: false,
               itemCount: _selectedExercises.length,
-              onReorder: _reorderExercises,
+              onReorderItem: _reorderExercises,
               itemBuilder: (context, index) {
                 final exercise = _selectedExercises[index];
 
