@@ -1,8 +1,9 @@
 import 'package:repstar/models/exercise.dart';
+import 'package:repstar/data/additional_exercises.dart';
 
-/// Je zehn Übungen für die sechs vorhandenen Muskelgruppen.
-/// Die Bildpfade neuer Übungen sind bereits für spätere Bilder vorbereitet.
-const List<Exercise> exerciseLibrary = [
+/// Bestehende Übungen und Ergänzungen bilden die gemeinsame Bibliothek.
+/// Jede der sechs Muskelgruppen enthält insgesamt 40 Übungen.
+final List<Exercise> exerciseLibrary = List<Exercise>.unmodifiable([
   // --------------------------------------------------
   // Beine
   // --------------------------------------------------
@@ -449,4 +450,6 @@ const List<Exercise> exerciseLibrary = [
     muscleGroup: 'Schultern',
     equipment: 'Kabelzug',
   ),
-];
+  // Ergänzt die 180 neuen Übungen aus der separaten Datei.
+  ...additionalExercises,
+]);
