@@ -402,6 +402,91 @@ class _TrainingScreenState extends State<TrainingScreen>
     await _saveData();
   }
 
+  /// Bestätigt den freiwilligen Prestige-Wechsel und speichert den Rang.
+  Future<void> _enterPrestige() async {
+    if (_isLoading ||
+        _isSaving ||
+        _checkingDraft ||
+        _loadError != null ||
+        _draftProblem != null ||
+        _hasUnsavedChanges ||
+        !_levelProgress.canEnterPrestige) {
+      return;
+    }
+
+    final nextPrestige = _levelProgress.prestige + 1;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Prestige $nextPrestige betreten?'),
+        content: const Text(
+          'Du beginnst wieder auf Level 1 mit neuen Levelnamen. '
+          'Die Schwierigkeit bleibt gleich.\n\n'
+          'Deine bisherigen Monatspunkte zählen nicht für den neuen '
+          'Durchlauf. Die nächste Auswertung bleibt am 1. des Monats, '
+          'auch wenn dieser kurz bevorsteht.\n\n'
+          'Deine Trainingshistorie und bereits erreichten Trophäen '
+          'bleiben erhalten. Ein Prestige kann später durch '
+          'Abstieg wieder verloren gehen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Prestige betreten'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || confirmed != true) {
+      return;
+    }
+
+    // Die Prüfung erfolgt nach der Bestätigung erneut:
+    // Während des Dialogs könnte ein Monatswechsel stattgefunden haben.
+    LevelProgress updated;
+
+    try {
+      updated = _levelService.enterPrestige(
+        progress: _levelProgress,
+        sessions: _allSessions,
+        now: DateTime.now(),
+      );
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message.toString())));
+      return;
+    }
+
+    setState(() {
+      _levelProgress = updated;
+      _now = DateTime.now();
+      _markChanged();
+    });
+
+    // Verwendet dieselbe Speicherung und Fehlerbehandlung wie Trainings.
+    final saved = await _saveData();
+
+    if (!mounted || !saved) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Prestige ${updated.prestige} erreicht! '
+          'Deine Trophäensammlung wurde gespeichert.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _editTraining(TrainingPlan training) async {
     final updated = await Navigator.of(context).push<TrainingPlan>(
       MaterialPageRoute<TrainingPlan>(
@@ -890,8 +975,20 @@ class _TrainingScreenState extends State<TrainingScreen>
             sessions: _allSessions,
             month: _levelProgress.periodStartedAt,
             now: _now,
+
+            // Anzeige und Monatsauswertung verwenden dieselbe XP-Grenze.
+            xpStartedAt: _levelProgress.xpStartedAt,
           ),
           now: _now,
+          onEnterPrestige:
+              _isLoading ||
+                  _isSaving ||
+                  _checkingDraft ||
+                  _loadError != null ||
+                  _draftProblem != null ||
+                  _hasUnsavedChanges
+              ? null
+              : _enterPrestige,
         ),
         TrainingHistoryScreen(
           trainings: _trainings,

@@ -1,11 +1,45 @@
-/// Speichert den persönlichen Rang und den ausgewerteten Kalendermonat.
+/// Speichert Rang, Prestige und den ausgewerteten Kalendermonat.
 class LevelProgress {
+  static const int maxLevel = 10;
+  static const int maxPrestige = 15;
+
   final int level;
 
-  /// Monatsbeginn in UTC, beispielsweise 2026-11-01 um 00:00 Uhr.
+  /// 0 bedeutet: normale Level ohne sichtbare Prestige-Bezeichnung.
+  final int prestige;
+
+  /// Bleibt auch bei einem Abstieg erhalten.
+  /// Daraus ergibt sich, welche Trophäen dauerhaft freigeschaltet sind.
+  final int highestPrestige;
+
+  /// Beginn des aktuell ausgewerteten Kalendermonats in UTC.
   final DateTime periodStartedAt;
 
-  const LevelProgress({required this.level, required this.periodStartedAt});
+  /// Nach einem Prestige-Wechsel zählen nur neue Trainingseinheiten.
+  /// null bedeutet: Es gilt der normale Monatsbeginn.
+  final DateTime? xpStartedAt;
+
+  const LevelProgress({
+    required this.level,
+    required this.periodStartedAt,
+    this.prestige = 0,
+    this.highestPrestige = 0,
+    this.xpStartedAt,
+  }) : assert(level >= 1 && level <= maxLevel),
+       assert(prestige >= 0 && prestige <= maxPrestige),
+       assert(highestPrestige >= prestige),
+       assert(highestPrestige <= maxPrestige);
+
+  /// Gibt an, ob aktuell ein Prestige aktiv ist.
+  bool get hasPrestige => prestige > 0;
+
+  /// Auf Level 10 kann freiwillig das nächste Prestige gewählt werden.
+  bool get canEnterPrestige => level == maxLevel && prestige < maxPrestige;
+
+  /// Liefert die Nummern aller dauerhaft freigeschalteten Trophäen.
+  List<int> get unlockedTrophies => List<int>.unmodifiable(
+    List<int>.generate(highestPrestige, (index) => index + 1),
+  );
 
   /// Liefert den Beginn des Kalendermonats eines Zeitpunkts.
   static DateTime monthStart(DateTime date) {
@@ -18,11 +52,11 @@ class LevelProgress {
   DateTime get periodEndsAt {
     final start = periodStartedAt.toUtc();
 
-    // DateTime behandelt Monat 13 automatisch als Januar des Folgejahres.
+    // Monat 13 wird automatisch zum Januar des Folgejahres.
     return DateTime.utc(start.year, start.month + 1, 1);
   }
 
-  /// Neue Nutzer beginnen mit Rang 1 im aktuellen Kalendermonat.
+  /// Neue Nutzer beginnen mit dem bisherigen Level 1 ohne Prestige.
   factory LevelProgress.initial({DateTime? now}) {
     return LevelProgress(
       level: 1,
@@ -33,7 +67,10 @@ class LevelProgress {
   Map<String, dynamic> toJson() {
     return {
       'level': level,
+      'prestige': prestige,
+      'highestPrestige': highestPrestige,
       'periodStartedAt': monthStart(periodStartedAt).toIso8601String(),
+      'xpStartedAt': xpStartedAt?.toUtc().toIso8601String(),
     };
   }
 
@@ -41,8 +78,22 @@ class LevelProgress {
     final level = json['level'];
     final startedAt = json['periodStartedAt'];
 
-    if (level is! int || level < 1 || level > 10) {
+    // Alte Speicherstände besitzen noch keine Prestige-Felder.
+    final prestige = json['prestige'] ?? 0;
+    final highestPrestige = json['highestPrestige'] ?? prestige;
+
+    if (level is! int || level < 1 || level > maxLevel) {
       throw const FormatException('Ungültiger Rang.');
+    }
+
+    if (prestige is! int || prestige < 0 || prestige > maxPrestige) {
+      throw const FormatException('Ungültiges Prestige.');
+    }
+
+    if (highestPrestige is! int ||
+        highestPrestige < prestige ||
+        highestPrestige > maxPrestige) {
+      throw const FormatException('Ungültiger Trophäenfortschritt.');
     }
 
     if (startedAt is! String) {
@@ -55,11 +106,27 @@ class LevelProgress {
       throw const FormatException('Ungültiger Beginn der Rangrunde.');
     }
 
+    final xpStartedAtText = json['xpStartedAt'];
+    DateTime? xpStartedAt;
+
+    if (xpStartedAtText != null) {
+      if (xpStartedAtText is! String) {
+        throw const FormatException('Ungültiger Beginn der XP-Wertung.');
+      }
+
+      xpStartedAt = DateTime.tryParse(xpStartedAtText);
+
+      if (xpStartedAt == null) {
+        throw const FormatException('Ungültiger Beginn der XP-Wertung.');
+      }
+    }
+
     return LevelProgress(
       level: level,
-
-      // Normalisiert auch zuvor gespeicherte Startdaten auf den Monatsbeginn.
+      prestige: prestige,
+      highestPrestige: highestPrestige,
       periodStartedAt: monthStart(parsedDate),
+      xpStartedAt: xpStartedAt?.toUtc(),
     );
   }
 }
