@@ -1,3 +1,5 @@
+import 'package:repstar/models/active_training_draft.dart';
+import 'package:repstar/services/active_training_storage_service.dart';
 import 'package:repstar/screens/exercise_progress_screen.dart';
 import 'dart:async';
 import 'package:repstar/screens/training_history_screen.dart';
@@ -26,6 +28,12 @@ class TrainingScreen extends StatefulWidget {
 class _TrainingScreenState extends State<TrainingScreen>
     with WidgetsBindingObserver {
   final StorageService _storageService = StorageService();
+
+  final ActiveTrainingStorageService _draftStorage =
+      ActiveTrainingStorageService();
+
+  bool _checkingDraft = false;
+  String? _draftProblem;
 
   final TrainingRewardService _rewardService = const TrainingRewardService();
 
@@ -138,6 +146,7 @@ class _TrainingScreenState extends State<TrainingScreen>
 
     // Sichert auch die Umstellung älterer Dateien auf das neue Format.
     await _saveData();
+    await _checkPendingDraft();
   }
 
   /// Aktualisiert Uhrzeit und gegebenenfalls den gespeicherten Rang.
@@ -418,9 +427,42 @@ class _TrainingScreenState extends State<TrainingScreen>
     await _saveData();
   }
 
+  /// Erkennt dieselbe Einheit anhand von Vorlage und ursprünglicher Startzeit.
+  TrainingSession? _findSavedSession(TrainingSession session) {
+    for (final saved in _allSessions) {
+      if (saved.trainingPlanId == session.trainingPlanId &&
+          saved.startedAt.isAtSameMomentAs(session.startedAt)) {
+        return saved;
+      }
+    }
+
+    return null;
+  }
+
   Future<void> _startTraining(TrainingPlan training) async {
-    final bodyWeightAtStart = _bodyWeightKg;
+    if (_isSaving || _checkingDraft || _draftProblem != null) {
+      return;
+    }
+
+    // Ein vorhandenes Training niemals durch ein neues überschreiben.
+    if (await _checkPendingDraft()) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    await _runTraining(training);
+  }
+
+  /// Öffnet entweder eine neue Einheit oder einen Zwischenstand.
+  Future<void> _runTraining(
+    TrainingPlan training, {
+    ActiveTrainingDraft? draft,
+  }) async {
     final history = _sessionsByTraining[training.id];
+
     final previousSession = history == null || history.isEmpty
         ? null
         : history.last;
@@ -430,6 +472,9 @@ class _TrainingScreenState extends State<TrainingScreen>
         builder: (context) => ActiveTrainingScreen(
           training: training,
           previousSession: previousSession,
+          bodyWeightKg: _bodyWeightKg,
+          draft: draft,
+          draftStorage: _draftStorage,
         ),
       ),
     );
@@ -438,49 +483,172 @@ class _TrainingScreenState extends State<TrainingScreen>
       return;
     }
 
-    var completedSession = TrainingSession(
-      trainingPlanId: session.trainingPlanId,
-      startedAt: session.startedAt,
-      endedAt: session.endedAt,
-      bodyWeightKg: bodyWeightAtStart,
-      setsByExercise: session.setsByExercise,
-      settingsByExercise: session.settingsByExercise,
-    );
+    await _acceptFinishedSession(training, session);
+  }
 
-    try {
-      final reward = _rewardService.calculate(
-        training: training,
-        session: completedSession,
-      );
+  /// Erst in den Verlauf schreiben, dann den Zwischenstand entfernen.
+  Future<void> _acceptFinishedSession(
+    TrainingPlan training,
+    TrainingSession session,
+  ) async {
+    final existingSession = _findSavedSession(session);
 
-      completedSession = completedSession.withReward(reward);
-    } catch (error, stackTrace) {
-      // Die absolvierte Einheit auch ohne Auswertung erhalten.
-      debugPrint('Trainingsauswertung fehlgeschlagen: $error');
-      debugPrintStack(stackTrace: stackTrace);
+    // Verwendet die bereits gespeicherte Einheit oder die gerade beendete.
+    // Dadurch enthält completed immer eine Trainingseinheit.
+    TrainingSession completed = existingSession ?? session;
+
+    if (existingSession == null) {
+      try {
+        final reward = _rewardService.calculate(
+          training: training,
+          session: session,
+        );
+
+        completed = session.withReward(reward);
+      } catch (error, stackTrace) {
+        debugPrint('Trainingsauswertung fehlgeschlagen: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+
+      final entry = completed;
+
+      setState(() {
+        _sessionsByTraining.putIfAbsent(training.id, () => []).add(entry);
+
+        _now = DateTime.now();
+
+        _levelProgress = _levelService.evaluate(
+          progress: _levelProgress,
+          sessions: _allSessions,
+          now: _now,
+        );
+
+        _markChanged();
+      });
     }
-
-    setState(() {
-      _sessionsByTraining
-          .putIfAbsent(training.id, () => [])
-          .add(completedSession);
-
-      _now = DateTime.now();
-
-      // Berücksichtigt auch ein Training über einen Monatswechsel hinweg.
-      _levelProgress = _levelService.evaluate(
-        progress: _levelProgress,
-        sessions: _allSessions,
-        now: _now,
-      );
-
-      _markChanged();
-    });
 
     final saved = await _saveData();
 
+    if (!mounted) {
+      return;
+    }
+
+    if (saved) {
+      try {
+        await _draftStorage.clear();
+      } catch (error) {
+        if (mounted) {
+          setState(() {
+            _draftProblem =
+                'Training gespeichert, aber der Zwischenstand '
+                'konnte nicht entfernt werden.';
+          });
+        }
+      }
+    }
+
     if (mounted) {
-      await _showTrainingSummary(completedSession, saved: saved);
+      await _showTrainingSummary(completed, saved: saved);
+    }
+  }
+
+  /// Prüft, ob ein unterbrochenes oder noch nicht übernommenes Training vorliegt.
+  ///
+  /// true bedeutet: Ein Zwischenstand wurde behandelt oder ein Fehler
+  /// verhindert vorerst den Start einer neuen Einheit.
+  Future<bool> _checkPendingDraft() async {
+    if (!mounted || _isLoading || _loadError != null || _checkingDraft) {
+      return true;
+    }
+
+    setState(() {
+      _checkingDraft = true;
+      _draftProblem = null;
+    });
+
+    try {
+      final draft = await _draftStorage.load();
+
+      if (!mounted) {
+        return true;
+      }
+
+      if (draft == null) {
+        return false;
+      }
+
+      // Der Verlauf kann schon gespeichert sein, während der alte
+      // Zwischenstand wegen eines Absturzes noch vorhanden ist.
+      if (_findSavedSession(draft.snapshot) != null) {
+        if (!await _saveData()) {
+          return true;
+        }
+
+        await _draftStorage.clear();
+        return false;
+      }
+
+      // Ein bereits beendetes Training übernehmen, ohne es neu zu starten.
+      if (draft.isFinished) {
+        await _acceptFinishedSession(draft.training, draft.snapshot);
+
+        return true;
+      }
+
+      final resume = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Training fortsetzen?'),
+          content: Text(
+            'Für „${draft.training.name}“ liegt ein Zwischenstand vor. '
+            'Sätze und Geräteeinstellungen können wiederhergestellt werden. '
+            'Der Timer zählt seit der ursprünglichen Startzeit weiter.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Verwerfen'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Fortsetzen'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) {
+        return true;
+      }
+
+      if (resume == true) {
+        await _runTraining(draft.training, draft: draft);
+      } else if (resume == false) {
+        await _draftStorage.clear();
+      }
+
+      // Wird der Dialog über Zurück geschlossen, bleibt der Stand erhalten.
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint('Zwischenstand konnte nicht verarbeitet werden: $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        setState(() {
+          _draftProblem =
+              'Der Trainingszwischenstand konnte nicht verarbeitet '
+              'werden. Bitte erneut versuchen.';
+        });
+      }
+
+      return true;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checkingDraft = false;
+        });
+      }
     }
   }
 
@@ -626,9 +794,10 @@ class _TrainingScreenState extends State<TrainingScreen>
                     IconButton(
                       tooltip: 'Training bearbeiten',
                       icon: const Icon(Icons.edit_outlined),
-                      onPressed: _isSaving
+                      onPressed:
+                          _isSaving || _checkingDraft || _draftProblem != null
                           ? null
-                          : () => _editTraining(training),
+                          : () => _startTraining(training),
                     ),
                   ],
                 ),
@@ -768,6 +937,23 @@ class _TrainingScreenState extends State<TrainingScreen>
       body: Column(
         children: [
           if (_isSaving) const LinearProgressIndicator(),
+          if (_draftProblem != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Text(_draftProblem!, textAlign: TextAlign.center),
+                  TextButton(
+                    onPressed: _checkingDraft
+                        ? null
+                        : () async {
+                            await _checkPendingDraft();
+                          },
+                    child: const Text('Zwischenstand erneut prüfen'),
+                  ),
+                ],
+              ),
+            ),
           if (_hasUnsavedChanges && !_isSaving)
             Padding(
               padding: const EdgeInsets.all(16),

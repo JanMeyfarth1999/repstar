@@ -1,5 +1,6 @@
 import 'dart:async';
-
+import 'package:repstar/models/active_training_draft.dart';
+import 'package:repstar/services/active_training_storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:repstar/models/exercise_settings.dart';
 import 'package:repstar/models/training_plan.dart';
@@ -9,23 +10,42 @@ import 'package:repstar/services/training_reward_service.dart';
 import 'package:repstar/widgets/training_exercise_card.dart';
 import 'package:vibration/vibration.dart';
 
-/// Zeigt das laufende Training mit Timern und Übungskarten.
+/// Zeigt ein neues oder wiederhergestelltes Training.
 class ActiveTrainingScreen extends StatefulWidget {
   final TrainingPlan training;
   final TrainingSession? previousSession;
+
+  /// Körpergewicht für eine neu gestartete Einheit.
+  final double? bodyWeightKg;
+
+  /// Vorhandener Zwischenstand beim Fortsetzen.
+  final ActiveTrainingDraft? draft;
+
+  /// Gemeinsame Instanz verhindert konkurrierende Dateizugriffe.
+  final ActiveTrainingStorageService? draftStorage;
 
   const ActiveTrainingScreen({
     super.key,
     required this.training,
     this.previousSession,
+    this.bodyWeightKg,
+    this.draft,
+    this.draftStorage,
   });
 
   @override
   State<ActiveTrainingScreen> createState() => _ActiveTrainingScreenState();
 }
 
-class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
-  final DateTime _startedAt = DateTime.now();
+class _ActiveTrainingScreenState extends State<ActiveTrainingScreen>
+    with WidgetsBindingObserver {
+  late final DateTime _startedAt;
+  late final double? _bodyWeightAtStart;
+  late final ActiveTrainingStorageService _draftStorage;
+
+  Timer? _draftSaveTimer;
+  String? _draftSaveError;
+  bool _isClosing = false;
 
   /// Veränderbare Satzlisten für die aktuelle Einheit.
   final Map<String, List<WorkoutSet>> _setsByExercise = {};
@@ -57,44 +77,155 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    final draft = widget.draft;
+    final source = draft?.snapshot ?? widget.previousSession;
+
+    _draftStorage = widget.draftStorage ?? ActiveTrainingStorageService();
+
+    _startedAt = draft?.snapshot.startedAt ?? DateTime.now();
+
+    // Beim Fortsetzen das damalige Körpergewicht erhalten.
+    _bodyWeightAtStart = draft != null
+        ? draft.snapshot.bodyWeightKg
+        : widget.bodyWeightKg;
+
+    final elapsed = DateTime.now().difference(_startedAt);
+    _elapsed = elapsed.isNegative ? Duration.zero : elapsed;
 
     for (final exercise in widget.training.exercises) {
       _exerciseKeys[exercise.id] = GlobalKey();
 
-      final previousSets = widget.previousSession?.setsByExercise[exercise.id];
+      final savedSets = source?.setsByExercise[exercise.id];
+      final settings = source?.settingsByExercise[exercise.id];
 
-      final previousSettings =
-          widget.previousSession?.settingsByExercise[exercise.id];
-
-      if (previousSettings != null) {
-        // Eine eigene Kopie verhindert Änderungen an der alten Einheit.
+      if (settings != null) {
         _settingsByExercise[exercise.id] = ExerciseSettings(
-          seatHeight: previousSettings.seatHeight,
-          otherAdjustments: previousSettings.otherAdjustments,
+          seatHeight: settings.seatHeight,
+          otherAdjustments: settings.otherAdjustments,
         );
       }
 
-      if (previousSets == null || previousSets.isEmpty) {
-        _setsByExercise[exercise.id] = List.generate(3, (_) => WorkoutSet());
-      } else {
-        // Letzte Werte übernehmen; die Häkchen starten wieder leer.
-        _setsByExercise[exercise.id] = previousSets
-            .map(
-              (workoutSet) => WorkoutSet(
-                weight: workoutSet.weight,
-                repetitions: workoutSet.repetitions,
-              ),
-            )
-            .toList();
+      _setsByExercise[exercise.id] = savedSets == null || savedSets.isEmpty
+          ? List.generate(3, (_) => WorkoutSet())
+          : savedSets
+                .map(
+                  (set) => WorkoutSet(
+                    weight: set.weight,
+                    repetitions: set.repetitions,
+
+                    // Beim Fortsetzen bleiben vorhandene Häkchen erhalten.
+                    // Bei einem neuen Training beginnen sie wieder leer.
+                    isCompleted: draft != null && set.isCompleted,
+                  ),
+                )
+                .toList();
+    }
+
+    if (draft == null) {
+      if (widget.training.exercises.isNotEmpty) {
+        _expandedExerciseId = widget.training.exercises.first.id;
+      }
+    } else {
+      final expandedId = draft.expandedExerciseId;
+
+      _expandedExerciseId = _exerciseKeys.containsKey(expandedId)
+          ? expandedId
+          : null;
+
+      _restDurationSeconds = draft.restDurationSeconds;
+
+      final end = draft.restEndsAt;
+
+      // Eine bereits abgelaufene Pause nicht erneut starten.
+      if (end != null && end.isAfter(DateTime.now())) {
+        _restEndsAt = end;
+        _restRemainingSeconds =
+            (end.difference(DateTime.now()).inMicroseconds /
+                    Duration.microsecondsPerSecond)
+                .ceil();
       }
     }
 
-    if (widget.training.exercises.isNotEmpty) {
-      _expandedExerciseId = widget.training.exercises.first.id;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _updateTimers());
+
+    // Bereits der Start des Trainings wird abgesichert.
+    unawaited(_saveDraft());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && !_isClosing && !_canLeave) {
+      _draftSaveTimer?.cancel();
+
+      // Beim Wechsel in den Hintergrund sofort eine Sicherung anstoßen.
+      unawaited(_saveDraft());
+    }
+  }
+
+  /// Bündelt schnelle Tastatureingaben zu einer Sicherung.
+  void _scheduleDraftSave() {
+    if (!mounted || _isClosing || _canLeave) {
+      return;
     }
 
-    // Ein Timer aktualisiert Trainingsdauer, XP-Status und Pausenanzeige.
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _updateTimers());
+    _draftSaveTimer?.cancel();
+
+    _draftSaveTimer = Timer(
+      const Duration(milliseconds: 350),
+      () => unawaited(_saveDraft()),
+    );
+  }
+
+  /// Erstellt eine eigene Kopie des aktuellen Trainingsstands.
+  TrainingSession _captureSession(DateTime end) {
+    return TrainingSession(
+      trainingPlanId: widget.training.id,
+      startedAt: _startedAt,
+      endedAt: end,
+      bodyWeightKg: _bodyWeightAtStart,
+      setsByExercise: _setsByExercise,
+      settingsByExercise: _settingsByExercise,
+    );
+  }
+
+  /// Speichert entweder einen laufenden oder einen fertigen Zwischenstand.
+  Future<bool> _saveDraft({TrainingSession? finishedSession}) async {
+    if (_canLeave || (_isClosing && finishedSession == null)) {
+      return false;
+    }
+
+    final draft = ActiveTrainingDraft(
+      training: widget.training,
+      snapshot: finishedSession ?? _captureSession(DateTime.now()),
+      restDurationSeconds: _restDurationSeconds,
+      restEndsAt: _restEndsAt,
+      expandedExerciseId: _expandedExerciseId,
+      isFinished: finishedSession != null,
+    );
+
+    try {
+      await _draftStorage.save(draft);
+
+      if (mounted && _draftSaveError != null) {
+        setState(() {
+          _draftSaveError = null;
+        });
+      }
+
+      return true;
+    } catch (error) {
+      debugPrint('Zwischenspeichern fehlgeschlagen: $error');
+
+      if (mounted) {
+        setState(() {
+          _draftSaveError = 'Zwischenstand konnte nicht gespeichert werden.';
+        });
+      }
+
+      return false;
+    }
   }
 
   /// Prüft, ob alle vorhandenen Sätze einer Übung abgehakt sind.
@@ -180,6 +311,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
         _pendingScrollExerciseId = null;
       }
     });
+    _scheduleDraftSave();
   }
 
   /// Scrollt nach der Aufklappanimation zur ausgewählten Karte.
@@ -264,6 +396,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       _restEndsAt = DateTime.now().add(Duration(seconds: _restDurationSeconds));
       _restRemainingSeconds = _restDurationSeconds;
     });
+    _scheduleDraftSave();
   }
 
   /// Verlängert eine laufende Pause um 30 Sekunden.
@@ -285,6 +418,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
                   Duration.microsecondsPerSecond)
               .ceil();
     });
+    _scheduleDraftSave();
   }
 
   /// Überspringt die Pause ohne Vibrationssignal.
@@ -293,6 +427,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       _restEndsAt = null;
       _restRemainingSeconds = 0;
     });
+    _scheduleDraftSave();
   }
 
   /// Löst ein kurzes Vibrationssignal aus.
@@ -428,22 +563,38 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
     });
   }
 
-  /// Erstellt die abgeschlossene Einheit.
-  void _finishTraining() {
-    final session = TrainingSession(
-      trainingPlanId: widget.training.id,
-      startedAt: _startedAt,
-      endedAt: DateTime.now(),
-      setsByExercise: _setsByExercise,
-      settingsByExercise: _settingsByExercise,
-    );
+  /// Erst den Abschluss absichern, dann zum Trainingsbildschirm zurück.
+  Future<void> _finishTraining() async {
+    if (_isClosing || _canLeave) {
+      return;
+    }
 
-    _leaveScreen(session);
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isClosing = true;
+    });
+
+    _draftSaveTimer?.cancel();
+
+    final session = _captureSession(DateTime.now());
+    final saved = await _saveDraft(finishedSession: session);
+
+    if (!mounted) {
+      return;
+    }
+
+    if (saved) {
+      _leaveScreen(session);
+    } else {
+      setState(() {
+        _isClosing = false;
+      });
+    }
   }
 
-  /// Verhindert versehentliches Verwerfen über den Zurück-Button.
   Future<void> _confirmDiscard() async {
-    if (_exitDialogOpen || _canLeave) {
+    if (_exitDialogOpen || _canLeave || _isClosing) {
       return;
     }
 
@@ -453,9 +604,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Training verwerfen?'),
-        content: const Text(
-          'Die Eingaben dieser Einheit werden nicht gespeichert.',
-        ),
+        content: const Text('Die Eingaben dieser Einheit werden verworfen.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -471,8 +620,31 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
 
     _exitDialogOpen = false;
 
-    if (mounted && discard == true) {
-      _leaveScreen();
+    if (!mounted || discard != true) {
+      return;
+    }
+
+    setState(() {
+      _isClosing = true;
+    });
+
+    _draftSaveTimer?.cancel();
+
+    try {
+      await _draftStorage.clear();
+
+      if (mounted) {
+        _leaveScreen();
+      }
+    } catch (error) {
+      debugPrint('Verwerfen fehlgeschlagen: $error');
+
+      if (mounted) {
+        setState(() {
+          _isClosing = false;
+          _draftSaveError = 'Zwischenstand konnte nicht gelöscht werden.';
+        });
+      }
     }
   }
 
@@ -509,9 +681,10 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
                   onChanged: (value) {
                     if (value != null) {
                       setState(() {
-                        // Gilt für die nächste gestartete Pause.
                         _restDurationSeconds = value;
                       });
+
+                      _scheduleDraftSave();
                     }
                   },
                 ),
@@ -546,6 +719,7 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
         children: [
           for (final exercise in widget.training.exercises)
             TrainingExerciseCard(
+              onChanged: _scheduleDraftSave,
               key: _exerciseKeys[exercise.id],
               exercise: exercise,
               sets: _setsByExercise[exercise.id]!,
@@ -568,6 +742,8 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
                     _settingsByExercise[exercise.id] = settings;
                   }
                 });
+
+                _scheduleDraftSave();
               },
             ),
         ],
@@ -578,6 +754,8 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _draftSaveTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -595,15 +773,37 @@ class _ActiveTrainingScreenState extends State<ActiveTrainingScreen> {
         body: Column(
           children: [
             _buildTrainingTimer(),
+            if (_draftSaveError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    Text(_draftSaveError!, textAlign: TextAlign.center),
+                    TextButton(
+                      onPressed: _isClosing
+                          ? null
+                          : () async {
+                              await _saveDraft();
+                            },
+                      child: const Text('Erneut sichern'),
+                    ),
+                  ],
+                ),
+              ),
             _buildRestTimer(),
-            Expanded(child: _buildExerciseList()),
+            Expanded(
+              child: AbsorbPointer(
+                absorbing: _isClosing,
+                child: _buildExerciseList(),
+              ),
+            ),
           ],
         ),
         bottomNavigationBar: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: FilledButton.icon(
-              onPressed: _finishTraining,
+              onPressed: _isClosing ? null : _finishTraining,
               icon: const Icon(Icons.flag_outlined),
               label: const Text('Training beenden'),
             ),
