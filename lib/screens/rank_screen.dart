@@ -62,9 +62,12 @@ class RankScreen extends StatelessWidget {
             'sie. Erneutes Erreichen vergibt sie nicht doppelt.\n\n'
             'Prestige 15, Level 10 ist die höchste Kombination.\n\n'
             'Nur Einheiten ab $minimumMinutes Minuten zählen für XP. '
-            'Pro ausgewertetem Monat erfolgt höchstens ein '
-            'Level-Aufstieg oder -Abstieg. Der freiwillige '
-            'Prestige-Wechsel ist zusätzlich möglich.\n\n'
+            'Levelaufstiege erfolgen sofort nach Erreichen der jeweiligen '
+            'XP-Grenze. Du kannst mehrere Level im selben Monat erreichen. '
+            'Die Monats-XP werden dabei nicht abgezogen.\n\n'
+            'Abstiege erfolgen ausschließlich zum Monatswechsel, '
+            'höchstens um ein Level je ausgewertetem Monat. '
+            'Ein freiwilliger Prestige-Wechsel bleibt auf Level 10 möglich.\n\n'
             'Vergangene Monate werden beim Öffnen nacheinander '
             'ausgewertet. Deine Trainingshistorie bleibt erhalten.',
           ),

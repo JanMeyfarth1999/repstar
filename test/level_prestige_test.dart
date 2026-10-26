@@ -284,5 +284,25 @@ void main() {
       // Oktober-Punkte werden im November nicht erneut gezählt.
       expect(novemberXp, 60);
     });
+
+    test('Mehrere Level werden sofort im laufenden Monat erreicht', () {
+      final updated = service.evaluate(
+        progress: LevelProgress(
+          level: 1,
+          periodStartedAt: DateTime.utc(2026, 10, 1),
+        ),
+        sessions: [
+          createXpSession(startedAt: DateTime.utc(2026, 10, 10, 10), xp: 240),
+        ],
+        now: DateTime.utc(2026, 10, 15),
+      );
+
+      // 80 → Level 2, 160 → Level 3, 240 → Level 4.
+      expect(updated.level, 4);
+
+      // Es ist weiterhin dieselbe Monatsrunde ohne Prestige.
+      expect(updated.prestige, 0);
+      expect(updated.periodStartedAt, DateTime.utc(2026, 10, 1));
+    });
   });
 }

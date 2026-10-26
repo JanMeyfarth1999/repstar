@@ -95,7 +95,7 @@ class LevelService {
     return total;
   }
 
-  /// Wertet alle abgeschlossenen, noch offenen Kalendermonate aus.
+  /// Wertet vergangene Monate aus und ermöglicht sofortige Levelaufstiege.
   LevelProgress evaluate({
     required LevelProgress progress,
     required Iterable<TrainingSession> sessions,
@@ -116,12 +116,10 @@ class LevelService {
       return progress;
     }
 
-    // Dieselbe Historie wird für alle offenen Monate wiederverwendet.
     final history = sessions.toList(growable: false);
 
+    // Zuerst alle abgeschlossenen Monate nacheinander auswerten.
     while (periodStart.isBefore(currentMonth)) {
-      final definition = definitionFor(level);
-
       final xp = monthlyXp(
         sessions: history,
         month: periodStart,
@@ -129,40 +127,64 @@ class LevelService {
         xpStartedAt: xpStartedAt,
       );
 
-      final promotionXp = definition.promotionXp;
+      final promotedLevel = _levelReachedWithXp(startingLevel: level, xp: xp);
 
-      if (promotionXp != null && xp >= promotionXp) {
-        // Pro abgeschlossenem Monat höchstens ein Level aufsteigen.
-        level += 1;
-      } else if (xp < definition.maintenanceXp) {
+      if (promotedLevel > level) {
+        // Auch nach längerer Abwesenheit mehrere erreichte Level übernehmen.
+        level = promotedLevel;
+      } else if (xp < definitionFor(level).maintenanceXp) {
         if (level > 1) {
           level -= 1;
         } else if (prestige > 0) {
-          // Unter Level 1 geht es ins vorherige Prestige, Level 10.
+          // Prestige kann verloren gehen, die Trophäen bleiben erhalten.
           prestige -= 1;
           level = LevelProgress.maxLevel;
         }
-
-        // Ohne Prestige bleibt Level 1 die Untergrenze.
       }
 
       periodStart = DateTime.utc(periodStart.year, periodStart.month + 1, 1);
 
-      // Nach dem Wechselmonat genügt wieder die normale Monatsgrenze.
+      // Nach dem Wechselmonat gilt wieder die normale Monatsgrenze.
       if (xpStartedAt != null && !xpStartedAt.isAfter(periodStart)) {
         xpStartedAt = null;
       }
     }
 
+    final currentXp = monthlyXp(
+      sessions: history,
+      month: periodStart,
+      now: currentTime,
+      xpStartedAt: xpStartedAt,
+    );
+
+    // Im laufenden Monat sofort aufsteigen, aber noch nicht absteigen.
+    level = _levelReachedWithXp(startingLevel: level, xp: currentXp);
+
     return LevelProgress(
       level: level,
       prestige: prestige,
-
-      // Trophäen bleiben bei jedem Abstieg erhalten.
       highestPrestige: progress.highestPrestige,
       periodStartedAt: periodStart,
       xpStartedAt: xpStartedAt,
     );
+  }
+
+  /// Prüft alle folgenden Level mit derselben Monats-Gesamtpunktzahl.
+  /// Die gemeinsame Methode verhindert doppelte Aufstiegslogik.
+  int _levelReachedWithXp({required int startingLevel, required int xp}) {
+    var level = startingLevel;
+
+    while (level < LevelProgress.maxLevel) {
+      final target = definitionFor(level).promotionXp;
+
+      if (target == null || xp < target) {
+        break;
+      }
+
+      level += 1;
+    }
+
+    return level;
   }
 
   /// Wechselt freiwillig von Level 10 ins nächste Prestige, Level 1.
